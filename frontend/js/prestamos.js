@@ -71,7 +71,10 @@ async function renderPrestamoDetalle(id) {
             <td>$${fmt(pg.capital_amortizado)}</td>
             <td>$${fmt(pg.interes_pagado)}</td>
             <td>$${fmt(pg.saldo_capital_post_pago)}</td>
-            <td><a href="/api/pagos/${pg.id}/recibo" target="_blank"><button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem">PDF</button></a></td>
+            <td style="display:flex;gap:.3rem">
+              <a href="/api/pagos/${pg.id}/recibo" target="_blank"><button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem">PDF</button></a>
+              <button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem;color:var(--rojo)" onclick="eliminarPago(${pg.id}, ${p.id})">✕</button>
+            </td>
           </tr>`).join('')}
       </tbody>
     </table>`}
@@ -223,4 +226,14 @@ async function renderPrestamoForm() {
       msg.innerHTML = `<span class="msg-error">${err.message}</span>`;
     }
   });
+}
+
+async function eliminarPago(pagoId, prestamoId) {
+  if (!confirm('¿Eliminar este pago? Esta acción no se puede deshacer.')) return;
+  try {
+    await api.delete(`/pagos/${pagoId}`);
+    renderPrestamoDetalle(prestamoId);
+  } catch (err) {
+    alert('Error al eliminar: ' + err.message);
+  }
 }

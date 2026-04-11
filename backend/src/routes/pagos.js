@@ -69,6 +69,35 @@ router.get('/:id_prestamo', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.delete('/:id', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('SELECT * FROM pagos WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Pago no encontrado' });
+    }
+    await client.query('DELETE FROM pagos WHERE id = $1', [req.params.id]);
+    // Si el préstamo estaba cancelado, revisar si aún corresponde
+    const { rows: restantes } = await client.query(
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago', [rows[0].id_prestamo]
+    );
+    const { rows: [prestamo] } = await client.query('SELECT * FROM prestamos WHERE id = $1', [rows[0].id_prestamo]);
+    const { saldoCapitalActual } = require('../services/motorCuotas');
+    const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), restantes);
+    const nuevoEstado = saldo === 0 ? 'cancelado' : 'activo';
+    await client.query('UPDATE prestamos SET estado = $1 WHERE id = $2', [nuevoEstado, prestamo.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
 router.get('/:id/recibo', async (req, res, next) => {
   try {
     const { rows: pagos } = await pool.query('SELECT * FROM pagos WHERE id = $1', [req.params.id]);
