@@ -22,8 +22,8 @@ async function renderSimulador() {
             ${tasas.map(t => `
               <tr>
                 <td><strong>${t.total_cuotas}</strong></td>
-                <td>${t.tasa_mensual}%</td>
-                <td>${t.tasa_total_pct}%</td>
+                <td>${parseFloat(t.tasa_mensual)}%</td>
+                <td>${parseFloat(t.tasa_total_pct)}%</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -35,7 +35,7 @@ async function renderSimulador() {
         <div style="background:white;padding:1.2rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1rem">
           <div class="form-group" style="margin-bottom:0">
             <label>Monto a prestar</label>
-            <input type="number" id="montoSim" placeholder="Ej: 1100000" step="1000"
+            <input type="text" id="montoSim" placeholder="Ej: $ 1.100.000"
               style="font-size:1.1rem;font-weight:600" />
           </div>
         </div>
@@ -46,11 +46,15 @@ async function renderSimulador() {
     </div>
   `;
 
-  document.getElementById('montoSim').addEventListener('input', () => simular(tasas));
+  const inputMonto = document.getElementById('montoSim');
+  inputMonto.addEventListener('input', e => {
+    const raw = e.target.value.replace(/\D/g, '');
+    e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
+    simular(tasas, parseInt(raw) || 0);
+  });
 }
 
-function simular(tasas) {
-  const monto = parseFloat(document.getElementById('montoSim').value);
+function simular(tasas, monto) {
   const contenedor = document.getElementById('tablaSim');
   if (!monto || monto <= 0) { contenedor.innerHTML = ''; return; }
 
