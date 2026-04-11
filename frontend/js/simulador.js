@@ -24,6 +24,10 @@ async function renderSimulador() {
                 <td><strong>${t.total_cuotas}</strong></td>
                 <td>${parseFloat(t.tasa_mensual)}%</td>
                 <td>${parseFloat(t.tasa_total_pct)}%</td>
+                <td>
+                  <button class="btn-secondary" style="margin:0;padding:.2rem .6rem;font-size:.8rem"
+                    onclick="editarTasa(${t.total_cuotas}, ${t.tasa_mensual})">✎</button>
+                </td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -52,6 +56,20 @@ async function renderSimulador() {
     e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
     simular(tasas, parseInt(raw) || 0);
   });
+}
+
+async function editarTasa(cuotas, tasaActual) {
+  const nueva = prompt(`Nueva tasa mensual para ${cuotas} cuota${cuotas > 1 ? 's' : ''} (actual: ${tasaActual}%):`, tasaActual);
+  if (nueva === null) return;
+  const valor = parseFloat(nueva);
+  if (isNaN(valor) || valor <= 0) { alert('Ingresá un número válido mayor a 0.'); return; }
+  if (!confirm(`¿Estás seguro que querés cambiar la tasa de ${cuotas} cuota${cuotas > 1 ? 's' : ''} de ${tasaActual}% a ${valor}%?`)) return;
+  try {
+    await api.put(`/tasas/${cuotas}?moneda=ARS`, { tasa_mensual: valor });
+    renderSimulador();
+  } catch (err) {
+    alert('Error al actualizar: ' + err.message);
+  }
 }
 
 function simular(tasas, monto) {
