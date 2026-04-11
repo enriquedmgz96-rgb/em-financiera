@@ -12,7 +12,8 @@ async function apiFetch(path, options = {}) {
 }
 
 const api = {
-  get:  (path)       => apiFetch(path),
-  post: (path, body) => apiFetch(path, { method: 'POST', body }),
-  put:  (path, body) => apiFetch(path, { method: 'PUT',  body }),
+  get:    (path)       => apiFetch(path),
+  post:   (path, body) => apiFetch(path, { method: 'POST',   body }),
+  put:    (path, body) => apiFetch(path, { method: 'PUT',    body }),
+  delete: (path)       => apiFetch(path, { method: 'DELETE' }),
 };
