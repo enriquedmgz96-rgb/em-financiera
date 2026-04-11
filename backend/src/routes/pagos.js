@@ -33,7 +33,7 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'El préstamo ya está cancelado' });
     }
     const { rows: pagosAnteriores } = await client.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago', [id_prestamo]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [id_prestamo]
     );
     const saldoActual = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagosAnteriores);
     const { interesPagado, capitalAmortizado, saldoCapitalPostPago, cuotasRestantesPostPago } = calcularPago({
@@ -66,7 +66,7 @@ router.post('/', async (req, res, next) => {
 router.get('/:id_prestamo', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id_prestamo]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro_real, fecha_registro', [req.params.id_prestamo]
     );
     res.json(rows);
   } catch (err) { next(err); }
@@ -84,7 +84,7 @@ router.delete('/:id', async (req, res, next) => {
     await client.query('DELETE FROM pagos WHERE id = $1', [req.params.id]);
     // Si el préstamo estaba cancelado, revisar si aún corresponde
     const { rows: restantes } = await client.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago', [rows[0].id_prestamo]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [rows[0].id_prestamo]
     );
     const { rows: [prestamo] } = await client.query('SELECT * FROM prestamos WHERE id = $1', [rows[0].id_prestamo]);
     const { saldoCapitalActual } = require('../services/motorCuotas');
