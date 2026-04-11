@@ -47,6 +47,10 @@ async function renderPagoForm(prestamoId) {
 
     <form id="formPago" style="max-width:500px">
       <div class="form-group">
+        <label>Fecha del pago *</label>
+        <input name="fecha_pago_real" type="date" required value="${new Date().toISOString().split('T')[0]}" />
+      </div>
+      <div class="form-group">
         <label>Tipo de pago</label>
         <select name="tipo_pago" id="tipoPago">
           <option value="cuota_completa">Cuota completa ($${fmt(cuotaCompleta)})</option>
