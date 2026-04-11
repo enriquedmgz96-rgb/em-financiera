@@ -12,67 +12,43 @@ async function renderSimulador() {
   app.innerHTML = `
     <h2>Tasas & Simulador</h2>
 
-    <div style="display:grid;grid-template-columns:1fr 2fr;gap:1.5rem;align-items:start">
-
-      <!-- Izquierda: maestro de tasas + categorías -->
-      <div>
-        <h3 style="margin-bottom:.75rem">Categorías de riesgo</h3>
-        <div id="listaCategorias" style="margin-bottom:1rem">
-          ${categorias.map(c => `
-            <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
-              <span style="background:${colorBadge(c.color)};color:white;padding:.25rem .7rem;border-radius:12px;font-size:.85rem;min-width:120px;text-align:center">${c.nombre}</span>
-              <span style="font-weight:600">${parseFloat(c.tasa_mensual)}% m.</span>
-              <button class="btn-secondary" style="margin:0;padding:.2rem .5rem;font-size:.8rem" onclick="editarCategoria(${c.id}, '${c.nombre}', ${c.tasa_mensual}, '${c.color}')">✎</button>
-              <button class="btn-secondary" style="margin:0;padding:.2rem .5rem;font-size:.8rem;color:var(--rojo)" onclick="eliminarCategoria(${c.id})">✕</button>
-            </div>`).join('')}
+    <div style="background:white;padding:1.2rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1.5rem">
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
+          <label>Nombre del cliente (opcional)</label>
+          <input type="text" id="nombreSim" placeholder="Ej: Juan Pérez" />
         </div>
-        <button class="btn-secondary" style="margin-bottom:1.5rem;font-size:.85rem" onclick="nuevaCategoria()">+ Nueva categoría</button>
-
-        <h3 style="margin-bottom:.75rem">Maestro de intereses ARS</h3>
-        <table>
-          <thead>
-            <tr><th>Cuotas</th><th>Tasa mensual</th><th>Tasa total</th></tr>
-          </thead>
-          <tbody>
-            ${tasas.map(t => `
-              <tr>
-                <td><strong>${t.total_cuotas}</strong></td>
-                <td>${parseFloat(t.tasa_mensual)}%</td>
-                <td>${parseFloat(t.tasa_total_pct)}%</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Derecha: simulador -->
-      <div>
-        <h3 style="margin-bottom:.75rem">Simulador de préstamo</h3>
-        <div style="background:white;padding:1.2rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1rem">
-          <div style="display:flex;gap:1rem;flex-wrap:wrap">
-            <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-              <label>Nombre del cliente (opcional)</label>
-              <input type="text" id="nombreSim" placeholder="Ej: Juan Pérez" />
-            </div>
-            <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-              <label>Monto a prestar</label>
-              <input type="text" id="montoSim" placeholder="Ej: $ 1.100.000" style="font-size:1.1rem;font-weight:600" />
-            </div>
-          </div>
-          <div class="form-group" style="margin-top:1rem;margin-bottom:0">
-            <label>Categoría de riesgo</label>
-            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.3rem" id="btnsCategorias">
-              ${categorias.map((c, i) => `
-                <button onclick="seleccionarCategoria(${c.tasa_mensual}, this)"
-                  style="border:2px solid ${colorBadge(c.color)};background:${i===0?colorBadge(c.color):'white'};color:${i===0?'white':colorBadge(c.color)};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;transition:.2s">
-                  ${c.nombre} — ${parseFloat(c.tasa_mensual)}%
-                </button>`).join('')}
-            </div>
-          </div>
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
+          <label>Monto a prestar</label>
+          <input type="text" id="montoSim" placeholder="Ej: $ 1.100.000" style="font-size:1.1rem;font-weight:600" />
         </div>
-
-        <div id="tablaSim"></div>
       </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Categoría de riesgo</label>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem" id="btnsCategorias">
+          ${categorias.map((c, i) => `
+            <button onclick="seleccionarCategoria(${c.tasa_mensual}, this)"
+              style="border:2px solid ${colorBadge(c.color)};background:${i===0?colorBadge(c.color):'white'};color:${i===0?'white':colorBadge(c.color)};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;transition:.2s">
+              ${c.nombre} — ${parseFloat(c.tasa_mensual)}%
+            </button>`).join('')}
+        </div>
+      </div>
+    </div>
 
+    <div id="tablaSim"></div>
+
+    <div style="margin-top:2rem;border-top:1px solid #eee;padding-top:1rem">
+      <h4 style="margin-bottom:.75rem;color:#666;font-size:.9rem">Administrar categorías</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center">
+        ${categorias.map(c => `
+          <div style="display:flex;align-items:center;gap:.3rem;background:#f8f9fa;padding:.3rem .6rem;border-radius:8px">
+            <span style="background:${colorBadge(c.color)};color:white;padding:.2rem .6rem;border-radius:10px;font-size:.8rem">${c.nombre}</span>
+            <span style="font-size:.85rem;font-weight:600">${parseFloat(c.tasa_mensual)}%</span>
+            <button class="btn-secondary" style="margin:0;padding:.15rem .4rem;font-size:.75rem" onclick="editarCategoria(${c.id}, '${c.nombre}', ${c.tasa_mensual}, '${c.color}')">✎</button>
+            <button class="btn-secondary" style="margin:0;padding:.15rem .4rem;font-size:.75rem;color:var(--rojo)" onclick="eliminarCategoria(${c.id})">✕</button>
+          </div>`).join('')}
+        <button class="btn-secondary" style="font-size:.85rem" onclick="nuevaCategoria()">+ Nueva</button>
+      </div>
     </div>
   `;
 
