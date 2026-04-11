@@ -62,11 +62,12 @@ async function renderPrestamoDetalle(id) {
     <h3>Historial de pagos</h3>
     ${p.pagos.length === 0 ? '<p style="margin-bottom:1rem;color:#999">Sin pagos registrados.</p>' : `
     <table style="margin-bottom:1.5rem">
-      <thead><tr><th>Fecha</th><th>Tipo</th><th>Monto pagado</th><th>Capital amort.</th><th>Interés</th><th>Saldo post-pago</th><th></th></tr></thead>
+      <thead><tr><th>Fecha pago</th><th>Registrado</th><th>Tipo</th><th>Monto pagado</th><th>Capital amort.</th><th>Interés</th><th>Saldo post-pago</th><th></th></tr></thead>
       <tbody>
         ${p.pagos.map(pg => `
           <tr>
-            <td>${new Date(pg.fecha_pago).toLocaleDateString('es-AR')}</td>
+            <td>${new Date(pg.fecha_pago_real).toLocaleDateString('es-AR')}</td>
+            <td style="font-size:.8rem;color:#999">${new Date(pg.fecha_registro).toLocaleDateString('es-AR')}</td>
             <td>${pg.tipo_pago.replace(/_/g, ' ')}</td>
             <td>$${fmt(pg.monto_pagado)}</td>
             <td>$${fmt(pg.capital_amortizado)}</td>

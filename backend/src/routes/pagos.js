@@ -7,9 +7,12 @@ const { generarRecibo } = require('../services/generadorPDF');
 const TIPOS_VALIDOS = ['cuota_completa', 'solo_interes', 'adelanto_parcial'];
 
 router.post('/', async (req, res, next) => {
-  const { id_prestamo, monto_pagado, tipo_pago, observaciones } = req.body;
+  const { id_prestamo, monto_pagado, tipo_pago, observaciones, fecha_pago_real } = req.body;
   if (!id_prestamo || !monto_pagado || !tipo_pago) {
     return res.status(400).json({ error: 'id_prestamo, monto_pagado y tipo_pago son requeridos' });
+  }
+  if (!fecha_pago_real) {
+    return res.status(400).json({ error: 'fecha_pago_real es requerida' });
   }
   if (!TIPOS_VALIDOS.includes(tipo_pago)) {
     return res.status(400).json({ error: `tipo_pago debe ser: ${TIPOS_VALIDOS.join(', ')}` });
@@ -41,10 +44,10 @@ router.post('/', async (req, res, next) => {
       cuotaBase: parseFloat(prestamo.valor_cuota_base),
     });
     const { rows: [pago] } = await client.query(
-      `INSERT INTO pagos (id_prestamo, monto_pagado, tipo_pago, capital_amortizado, interes_pagado,
-        saldo_capital_post_pago, cuotas_restantes_post_pago, observaciones)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [id_prestamo, monto_pagado, tipo_pago, capitalAmortizado, interesPagado,
+      `INSERT INTO pagos (id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, capital_amortizado,
+        interes_pagado, saldo_capital_post_pago, cuotas_restantes_post_pago, observaciones)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, capitalAmortizado, interesPagado,
         saldoCapitalPostPago, cuotasRestantesPostPago, observaciones || null]
     );
     if (saldoCapitalPostPago === 0) {
@@ -63,7 +66,7 @@ router.post('/', async (req, res, next) => {
 router.get('/:id_prestamo', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago', [req.params.id_prestamo]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id_prestamo]
     );
     res.json(rows);
   } catch (err) { next(err); }
