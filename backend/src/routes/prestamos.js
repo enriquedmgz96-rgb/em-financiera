@@ -57,7 +57,7 @@ router.get('/:id', async (req, res, next) => {
     if (prestamos.length === 0) return res.status(404).json({ error: 'Préstamo no encontrado' });
     const prestamo = prestamos[0];
     const { rows: pagos } = await pool.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago', [req.params.id]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]
     );
     const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagos);
     const interes_proximo_mes = parseFloat((saldo * (parseFloat(prestamo.tasa_interes_mensual) / 100)).toFixed(2));

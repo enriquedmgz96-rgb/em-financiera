@@ -20,7 +20,7 @@ router.get('/', async (req, res, next) => {
       SELECT COALESCE(SUM(ultimo_saldo.saldo),0) AS capital_pendiente
       FROM (
         SELECT DISTINCT ON (id_prestamo) saldo_capital_post_pago AS saldo
-        FROM pagos ORDER BY id_prestamo, fecha_pago DESC
+        FROM pagos ORDER BY id_prestamo, fecha_pago_real DESC
       ) AS ultimo_saldo
     `);
     const { rows: mora } = await pool.query(`
