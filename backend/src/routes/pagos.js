@@ -7,7 +7,7 @@ const { generarRecibo } = require('../services/generadorPDF');
 const TIPOS_VALIDOS = ['cuota_completa', 'solo_interes', 'adelanto_parcial'];
 
 router.post('/', async (req, res, next) => {
-  const { id_prestamo, monto_pagado, tipo_pago, observaciones, fecha_pago_real } = req.body;
+  const { id_prestamo, monto_pagado, tipo_pago, observaciones, fecha_pago_real, forma_pago } = req.body;
   if (!id_prestamo || !monto_pagado || !tipo_pago) {
     return res.status(400).json({ error: 'id_prestamo, monto_pagado y tipo_pago son requeridos' });
   }
@@ -44,11 +44,11 @@ router.post('/', async (req, res, next) => {
       cuotaBase: parseFloat(prestamo.valor_cuota_base),
     });
     const { rows: [pago] } = await client.query(
-      `INSERT INTO pagos (id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, capital_amortizado,
-        interes_pagado, saldo_capital_post_pago, cuotas_restantes_post_pago, observaciones)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, capitalAmortizado, interesPagado,
-        saldoCapitalPostPago, cuotasRestantesPostPago, observaciones || null]
+      `INSERT INTO pagos (id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago,
+        capital_amortizado, interes_pagado, saldo_capital_post_pago, cuotas_restantes_post_pago, observaciones)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago || 'efectivo',
+        capitalAmortizado, interesPagado, saldoCapitalPostPago, cuotasRestantesPostPago, observaciones || null]
     );
     if (saldoCapitalPostPago === 0) {
       await client.query("UPDATE prestamos SET estado = 'cancelado' WHERE id = $1", [id_prestamo]);

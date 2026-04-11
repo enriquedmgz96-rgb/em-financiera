@@ -98,8 +98,13 @@ function generarRecibo(pago, prestamo) {
 
 function _escribirRecibo(doc, pago, p, startY, titulo) {
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
-  const fechaPago = new Date(pago.fecha_pago).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba' });
-  const horaPago = new Date(pago.fecha_pago).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' });
+  // fecha_pago_real es DATE (sin hora), fecha_registro es TIMESTAMPTZ
+  const fechaPago = pago.fecha_pago_real
+    ? String(pago.fecha_pago_real).split('T')[0].split('-').reverse().join('/')
+    : '-';
+  const horaRegistro = pago.fecha_registro
+    ? new Date(pago.fecha_registro).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' })
+    : '';
   const col1 = 40, col2 = 310;
 
   doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
@@ -111,14 +116,14 @@ function _escribirRecibo(doc, pago, p, startY, titulo) {
   let y = startY + 35;
   doc.font('Helvetica').fontSize(9.5).fillColor('#000');
   doc.text(`Cliente: ${p.apellido}, ${p.nombre}`, col1, y); doc.text(`Recibo N°: ${pago.id}`, col2, y); y += 14;
-  doc.text(`DNI: ${p.dni}`, col1, y); doc.text(`Fecha: ${fechaPago} ${horaPago}`, col2, y); y += 14;
+  doc.text(`DNI: ${p.dni}`, col1, y); doc.text(`Fecha de pago: ${fechaPago}`, col2, y); y += 14;
   doc.text(`Préstamo N°: ${p.id}`, col1, y); doc.text(`Saldo post-pago: $${fmt(pago.saldo_capital_post_pago)}`, col2, y); y += 18;
 
   doc.rect(col1, y, doc.page.width - 80, 38).fill('#f0f9f4').stroke('#27ae60');
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(10)
     .text(`MONTO PAGADO: $${fmt(pago.monto_pagado)} ${p.moneda}`, col1 + 10, y + 5);
   doc.font('Helvetica').fontSize(8.5)
-    .text(`Tipo: ${pago.tipo_pago.replace(/_/g, ' ')}   |   Capital amortizado: $${fmt(pago.capital_amortizado)}   |   Interés: $${fmt(pago.interes_pagado)}`, col1 + 10, y + 20);
+    .text(`Tipo: ${pago.tipo_pago.replace(/_/g, ' ')}   |   Forma: ${pago.forma_pago || 'efectivo'}   |   Capital amort.: $${fmt(pago.capital_amortizado)}   |   Interés: $${fmt(pago.interes_pagado)}`, col1 + 10, y + 20);
   y += 50;
 
   if (pago.observaciones) {

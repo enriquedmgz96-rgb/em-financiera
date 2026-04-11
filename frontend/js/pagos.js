@@ -65,7 +65,18 @@ async function renderPagoForm(prestamoId) {
       </div>
       <div class="form-group">
         <label>Monto a pagar</label>
-        <input name="monto_pagado" id="montoPagado" type="number" step="0.01" value="${cuotaCompleta.toFixed(2)}" />
+        <input name="monto_pagado" id="montoPagado" type="text" value="$ ${Math.round(cuotaCompleta).toLocaleString('es-AR')}" />
+        <input type="hidden" id="montoPagadoRaw" value="${cuotaCompleta.toFixed(2)}" />
+      </div>
+      <div class="form-group">
+        <label>Forma de pago</label>
+        <select name="forma_pago">
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="cheque">Cheque</option>
+          <option value="debito">Débito</option>
+          <option value="otro">Otro</option>
+        </select>
       </div>
       <div class="form-group"><label>Observaciones</label><textarea name="observaciones"></textarea></div>
 
@@ -82,7 +93,7 @@ async function renderPagoForm(prestamoId) {
 
   function actualizarPreview() {
     const tipo = tipoPagoEl.value;
-    const monto = parseFloat(montoPagadoEl.value) || 0;
+    const monto = parseFloat(montoRawEl.value) || 0;
     const saldo = p.saldo_capital_actual;
     const interes = p.interes_proximo_mes;
     const cuotaBase = parseFloat(p.valor_cuota_base);
@@ -106,18 +117,32 @@ async function renderPagoForm(prestamoId) {
     `;
   }
 
-  tipoPagoEl.addEventListener('change', () => {
-    if (tipoPagoEl.value === 'cuota_completa') montoPagadoEl.value = cuotaCompleta.toFixed(2);
-    else if (tipoPagoEl.value === 'solo_interes') montoPagadoEl.value = p.interes_proximo_mes.toFixed(2);
+  const montoRawEl = document.getElementById('montoPagadoRaw');
+
+  function setMonto(valor) {
+    montoPagadoEl.value = '$ ' + Math.round(valor).toLocaleString('es-AR');
+    montoRawEl.value = valor.toFixed(2);
+  }
+
+  montoPagadoEl.addEventListener('input', e => {
+    const raw = e.target.value.replace(/\D/g, '');
+    e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
+    montoRawEl.value = raw || '0';
     actualizarPreview();
   });
-  montoPagadoEl.addEventListener('input', actualizarPreview);
+
+  tipoPagoEl.addEventListener('change', () => {
+    if (tipoPagoEl.value === 'cuota_completa') setMonto(cuotaCompleta);
+    else if (tipoPagoEl.value === 'solo_interes') setMonto(p.interes_proximo_mes);
+    actualizarPreview();
+  });
   actualizarPreview();
 
   document.getElementById('formPago').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(e.target).entries());
     fd.id_prestamo = prestamoId;
+    fd.monto_pagado = montoRawEl.value;
     const msg = document.getElementById('pagoMsg');
     try {
       await api.post('/pagos', fd);
