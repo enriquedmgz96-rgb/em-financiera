@@ -25,7 +25,7 @@ async function renderPrestamos() {
             <tr>
               <td>${p.apellido}, ${p.nombre}</td>
               <td>$${fmt(p.monto_capital)} ${p.moneda}</td>
-              <td>${p.tasa_interes_mensual}% m.</td>
+              <td>${parseFloat(p.tasa_interes_mensual)}% m.</td>
               <td>${p.total_cuotas}</td>
               <td>${String(p.primer_vencimiento).split('T')[0]}</td>
               <td>${semaforo(p)}</td>
