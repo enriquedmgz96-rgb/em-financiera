@@ -52,8 +52,9 @@ async function renderPrestamoDetalle(id) {
     <div class="cards" style="margin-bottom:1.5rem">
       <div class="card"><div class="label">Capital original</div><div class="value">$${fmt(p.monto_capital)}</div></div>
       <div class="card"><div class="label">Saldo actual</div><div class="value">$${fmt(p.saldo_capital_actual)}</div></div>
+      <div class="card"><div class="label">Total con intereses</div><div class="value">$${fmt(parseFloat(p.monto_capital) * (1 + parseFloat(p.tasa_interes_mensual) * p.total_cuotas / 100))}</div></div>
       <div class="card"><div class="label">Interés próx. mes</div><div class="value">$${fmt(p.interes_proximo_mes)}</div></div>
-      <div class="card"><div class="label">Tasa mensual</div><div class="value">${p.tasa_interes_mensual}%</div></div>
+      <div class="card"><div class="label">Tasa mensual</div><div class="value">${parseFloat(p.tasa_interes_mensual)}%</div></div>
       <div class="card"><div class="label">Cuotas</div><div class="value">${p.total_cuotas}</div></div>
       <div class="card"><div class="label">Moneda</div><div class="value">${p.moneda}</div></div>
     </div>
