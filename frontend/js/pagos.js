@@ -32,11 +32,16 @@ async function renderPagoForm(prestamoId) {
 
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
   const cuotaCompleta = parseFloat(p.valor_cuota_base) + p.interes_proximo_mes;
+  const nroCuotaActual = p.pagos.length + 1;
 
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>Registrar pago — ${p.apellido}, ${p.nombre}</h2>
       <button class="btn-secondary" onclick="renderPagos()">← Volver</button>
+    </div>
+    <div style="background:#e8f4fd;border-left:4px solid #2980b9;padding:.6rem 1rem;border-radius:4px;margin-bottom:1rem;font-size:.95rem">
+      Registrando <strong>cuota ${nroCuotaActual} de ${p.total_cuotas}</strong>
+      ${nroCuotaActual > p.total_cuotas ? ' <span style="color:var(--rojo)">(préstamo en adelanto)</span>' : ''}
     </div>
     <div class="cards" style="margin-bottom:1.5rem">
       <div class="card"><div class="label">Saldo capital</div><div class="value">$${fmt(p.saldo_capital_actual)}</div></div>
