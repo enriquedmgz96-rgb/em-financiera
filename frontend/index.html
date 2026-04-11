@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EM Financiera</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <span class="brand">EM Financiera</span>
+    <div class="nav-links">
+      <a href="#" data-page="dashboard" class="active">Dashboard</a>
+      <a href="#" data-page="clientes">Clientes</a>
+      <a href="#" data-page="prestamos">Préstamos</a>
+      <a href="#" data-page="pagos">Registrar Pago</a>
+    </div>
+  </nav>
+
+  <main id="app"></main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/dashboard.js"></script>
+  <script src="/js/clientes.js"></script>
+  <script src="/js/prestamos.js"></script>
+  <script src="/js/pagos.js"></script>
+  <script>
+    const pages = { dashboard: renderDashboard, clientes: renderClientes, prestamos: renderPrestamos, pagos: renderPagos };
+
+    function navigate(page) {
+      document.querySelectorAll('.nav-links a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+      pages[page]();
+    }
+
+    document.querySelectorAll('.nav-links a').forEach(a => {
+      a.addEventListener('click', e => { e.preventDefault(); navigate(a.dataset.page); });
+    });
+
+    navigate('dashboard');
+  </script>
+</body>
+</html>
