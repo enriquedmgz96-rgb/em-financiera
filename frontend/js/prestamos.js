@@ -87,6 +87,9 @@ async function renderPrestamoDetalle(id) {
       <a href="/api/prestamos/${p.id}/contrato" target="_blank">
         <button class="btn-secondary">Descargar contrato</button>
       </a>
+      <a href="/api/prestamos/${p.id}/resumen" target="_blank">
+        <button class="btn-secondary">Estado de cuenta</button>
+      </a>
     </div>
   `;
 }

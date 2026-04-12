@@ -137,4 +137,113 @@ function _escribirRecibo(doc, pago, p, startY, titulo) {
   doc.font('Helvetica').fontSize(7.5).fillColor('#000').text('Firma y sello de la financiera', col2, firmaY + 3);
 }
 
-module.exports = { generarContrato, generarRecibo };
+function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
+  const doc = new PDFDocument({ size: 'A4', margins: { top: 40, bottom: 40, left: 40, right: 40 } });
+  const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  const fmtFecha = f => f ? String(f).split('T')[0].split('-').reverse().join('/') : '-';
+  const hoy = new Date().toLocaleDateString('es-AR');
+  const W = doc.page.width - 80;
+
+  // Encabezado
+  doc.font('Helvetica-Bold').fontSize(14).fillColor('#000')
+    .text(`${FINANCIERA} — ESTADO DE CUENTA`, 40, 40, { align: 'center' });
+  doc.font('Helvetica').fontSize(8.5).fillColor('#555')
+    .text(`${FINANCIERA_CUIT}   |   Generado: ${hoy}`, 40, 57, { align: 'center' });
+  doc.moveTo(40, 70).lineTo(doc.page.width - 40, 70).lineWidth(0.5).stroke('#2c3e50');
+
+  let y = 80;
+
+  // Datos del cliente y préstamo
+  doc.font('Helvetica-Bold').fontSize(9).fillColor('#2c3e50').text('DATOS DEL CLIENTE', 40, y);
+  y += 13;
+  doc.font('Helvetica').fontSize(9).fillColor('#000');
+  doc.text(`Cliente: ${prestamo.apellido}, ${prestamo.nombre}`, 40, y);
+  doc.text(`DNI: ${prestamo.dni}`, 320, y); y += 12;
+  doc.text(`CUIT: ${prestamo.cuit || '-'}`, 40, y);
+  doc.text(`Teléfono: ${prestamo.telefono || '-'}`, 320, y); y += 18;
+
+  // Resumen del préstamo — cajas de estado
+  doc.font('Helvetica-Bold').fontSize(9).fillColor('#2c3e50').text('CONDICIONES DEL PRÉSTAMO', 40, y); y += 13;
+  doc.font('Helvetica').fontSize(9).fillColor('#000');
+  doc.text(`Préstamo N°: ${prestamo.id}`, 40, y); doc.text(`Moneda: ${prestamo.moneda}`, 200, y); doc.text(`Fecha otorgamiento: ${fmtFecha(prestamo.fecha)}`, 320, y); y += 12;
+  doc.text(`Capital original: $${fmt(prestamo.monto_capital)}`, 40, y); doc.text(`Tasa mensual: ${parseFloat(prestamo.tasa_interes_mensual)}%`, 200, y); doc.text(`Total cuotas: ${prestamo.total_cuotas}`, 320, y); y += 12;
+  doc.text(`Primer vencimiento: ${fmtFecha(prestamo.primer_vencimiento)}`, 40, y); y += 20;
+
+  // Cajas de estado actual
+  const cajas = [
+    { label: 'SALDO ACTUAL', valor: `$${fmt(saldoActual)}`, color: '#e74c3c' },
+    { label: 'CUOTAS PAGADAS', valor: `${pagos.length} / ${prestamo.total_cuotas}`, color: '#27ae60' },
+    { label: 'INTERÉS PRÓX. MES', valor: `$${fmt(interesProxMes)}`, color: '#f39c12' },
+    { label: 'ESTADO', valor: prestamo.estado.toUpperCase(), color: prestamo.estado === 'activo' ? '#27ae60' : prestamo.estado === 'mora' ? '#e74c3c' : '#7f8c8d' },
+  ];
+  const cajaW = (W - 15) / 4;
+  cajas.forEach((c, i) => {
+    const cx = 40 + i * (cajaW + 5);
+    doc.rect(cx, y, cajaW, 40).fill('#f8f9fa').stroke('#dee2e6');
+    doc.font('Helvetica').fontSize(7).fillColor('#666').text(c.label, cx + 5, y + 5, { width: cajaW - 10 });
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(c.color).text(c.valor, cx + 5, y + 17, { width: cajaW - 10 });
+  });
+  y += 55;
+
+  // Historial de pagos
+  doc.font('Helvetica-Bold').fontSize(9).fillColor('#2c3e50').text('HISTORIAL DE PAGOS', 40, y); y += 13;
+
+  if (pagos.length === 0) {
+    doc.font('Helvetica').fontSize(9).fillColor('#999').text('Sin pagos registrados.', 40, y);
+    y += 15;
+  } else {
+    const cols = [
+      { label: 'N°',          w: 25  },
+      { label: 'Fecha',       w: 60  },
+      { label: 'Tipo',        w: 80  },
+      { label: 'Forma',       w: 65  },
+      { label: 'Monto',       w: 75  },
+      { label: 'Capital',     w: 75  },
+      { label: 'Interés',     w: 65  },
+      { label: 'Saldo',       w: 75  },
+    ];
+    // Header
+    let x = 40;
+    doc.rect(x, y, W, 12).fill('#2c3e50');
+    doc.font('Helvetica-Bold').fontSize(7).fillColor('#fff');
+    cols.forEach(c => { doc.text(c.label, x + 2, y + 3, { width: c.w }); x += c.w; });
+    y += 12;
+
+    pagos.forEach((pg, idx) => {
+      x = 40;
+      if (idx % 2 === 0) doc.rect(x, y, W, 11).fill('#f8f9fa').stroke('');
+      doc.font('Helvetica').fontSize(7.5).fillColor('#000');
+      const vals = [
+        idx + 1,
+        fmtFecha(pg.fecha_pago_real),
+        pg.tipo_pago.replace(/_/g, ' '),
+        pg.forma_pago || 'efectivo',
+        `$${fmt(pg.monto_pagado)}`,
+        `$${fmt(pg.capital_amortizado)}`,
+        `$${fmt(pg.interes_pagado)}`,
+        `$${fmt(pg.saldo_capital_post_pago)}`,
+      ];
+      cols.forEach((c, i) => { doc.text(String(vals[i]), x + 2, y + 2, { width: c.w }); x += c.w; });
+      y += 11;
+    });
+    y += 8;
+  }
+
+  // Próximo vencimiento
+  if (prestamo.estado !== 'cancelado') {
+    const proxVcto = new Date(prestamo.primer_vencimiento);
+    proxVcto.setMonth(proxVcto.getMonth() + pagos.length);
+    doc.moveTo(40, y).lineTo(doc.page.width - 40, y).lineWidth(0.5).stroke('#dee2e6'); y += 8;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#2c3e50')
+      .text(`Próximo vencimiento estimado: ${proxVcto.toLocaleDateString('es-AR')}   |   Interés estimado: $${fmt(interesProxMes)}`, 40, y);
+    y += 18;
+  }
+
+  doc.font('Helvetica').fontSize(7.5).fillColor('#999')
+    .text('Este documento es informativo y no reemplaza el contrato original.', 40, y);
+
+  doc.end();
+  return doc;
+}
+
+module.exports = { generarContrato, generarRecibo, generarResumen };
