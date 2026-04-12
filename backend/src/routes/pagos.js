@@ -32,29 +32,46 @@ router.post('/', async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'El préstamo ya está cancelado' });
     }
-    const { rows: pagosAnteriores } = await client.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [id_prestamo]
-    );
-    const saldoActual = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagosAnteriores);
-    const { interesPagado, capitalAmortizado, saldoCapitalPostPago, cuotasRestantesPostPago } = calcularPago({
-      tipoPago: tipo_pago,
-      montoPagado: parseFloat(monto_pagado),
-      saldoCapitalActual: saldoActual,
-      tasaMensual: parseFloat(prestamo.tasa_interes_mensual),
-      cuotaBase: parseFloat(prestamo.valor_cuota_base),
-    });
-    const { rows: [pago] } = await client.query(
+
+    // Insertar el nuevo pago con valores provisorios (se recalculan abajo)
+    const { rows: [pagoInsertado] } = await client.query(
       `INSERT INTO pagos (id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago,
         capital_amortizado, interes_pagado, saldo_capital_post_pago, cuotas_restantes_post_pago, observaciones)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago || 'efectivo',
-        capitalAmortizado, interesPagado, saldoCapitalPostPago, cuotasRestantesPostPago, observaciones || null]
+       VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6) RETURNING *`,
+      [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago || 'efectivo', observaciones || null]
     );
-    if (saldoCapitalPostPago === 0) {
-      await client.query("UPDATE prestamos SET estado = 'cancelado' WHERE id = $1", [id_prestamo]);
+
+    // Replay: recalcular TODOS los pagos del préstamo en orden cronológico
+    const { rows: todosPagos } = await client.query(
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [id_prestamo]
+    );
+    let saldo = parseFloat(prestamo.monto_capital);
+    const cuotaBase = parseFloat(prestamo.valor_cuota_base);
+    const tasaMensual = parseFloat(prestamo.tasa_interes_mensual);
+    let pagoFinal = null;
+
+    for (const pg of todosPagos) {
+      const resultado = calcularPago({
+        tipoPago: pg.tipo_pago,
+        montoPagado: parseFloat(pg.monto_pagado),
+        saldoCapitalActual: saldo,
+        tasaMensual,
+        cuotaBase,
+      });
+      await client.query(
+        `UPDATE pagos SET capital_amortizado=$1, interes_pagado=$2,
+          saldo_capital_post_pago=$3, cuotas_restantes_post_pago=$4 WHERE id=$5`,
+        [resultado.capitalAmortizado, resultado.interesPagado,
+          resultado.saldoCapitalPostPago, resultado.cuotasRestantesPostPago, pg.id]
+      );
+      saldo = resultado.saldoCapitalPostPago;
+      if (pg.id === pagoInsertado.id) pagoFinal = { ...pg, ...resultado };
     }
+
+    const nuevoEstado = saldo === 0 ? 'cancelado' : 'activo';
+    await client.query('UPDATE prestamos SET estado = $1 WHERE id = $2', [nuevoEstado, id_prestamo]);
     await client.query('COMMIT');
-    res.status(201).json(pago);
+    res.status(201).json(pagoFinal);
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -81,16 +98,27 @@ router.delete('/:id', async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Pago no encontrado' });
     }
+    const idPrestamo = rows[0].id_prestamo;
     await client.query('DELETE FROM pagos WHERE id = $1', [req.params.id]);
-    // Si el préstamo estaba cancelado, revisar si aún corresponde
+
+    // Replay tras la eliminación
+    const { rows: [prestamo] } = await client.query('SELECT * FROM prestamos WHERE id = $1', [idPrestamo]);
     const { rows: restantes } = await client.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [rows[0].id_prestamo]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [idPrestamo]
     );
-    const { rows: [prestamo] } = await client.query('SELECT * FROM prestamos WHERE id = $1', [rows[0].id_prestamo]);
-    const { saldoCapitalActual } = require('../services/motorCuotas');
-    const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), restantes);
+    let saldo = parseFloat(prestamo.monto_capital);
+    const cuotaBase = parseFloat(prestamo.valor_cuota_base);
+    const tasaMensual = parseFloat(prestamo.tasa_interes_mensual);
+    for (const pg of restantes) {
+      const r = calcularPago({ tipoPago: pg.tipo_pago, montoPagado: parseFloat(pg.monto_pagado), saldoCapitalActual: saldo, tasaMensual, cuotaBase });
+      await client.query(
+        'UPDATE pagos SET capital_amortizado=$1, interes_pagado=$2, saldo_capital_post_pago=$3, cuotas_restantes_post_pago=$4 WHERE id=$5',
+        [r.capitalAmortizado, r.interesPagado, r.saldoCapitalPostPago, r.cuotasRestantesPostPago, pg.id]
+      );
+      saldo = r.saldoCapitalPostPago;
+    }
     const nuevoEstado = saldo === 0 ? 'cancelado' : 'activo';
-    await client.query('UPDATE prestamos SET estado = $1 WHERE id = $2', [nuevoEstado, prestamo.id]);
+    await client.query('UPDATE prestamos SET estado = $1 WHERE id = $2', [nuevoEstado, idPrestamo]);
     await client.query('COMMIT');
     res.json({ ok: true });
   } catch (err) {
