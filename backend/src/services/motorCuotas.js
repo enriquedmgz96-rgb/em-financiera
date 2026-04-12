@@ -2,9 +2,18 @@
  * Motor de cuotas para EM-Financiera.
  * Funciones puras — sin efectos secundarios, sin acceso a DB.
  *
- * Soporta dos sistemas de amortización:
- *   'aleman'  — capital fijo por cuota, interés sobre saldo (cuota total decreciente)
- *   'frances' — cuota total fija (PMT), interés sobre saldo, capital creciente
+ * Soporta tres sistemas de amortización:
+ *
+ *  'flat'    — cuota FIJA, interés sobre capital ORIGINAL (el más común en Argentina).
+ *              Interés = capital_original × tasa (siempre igual).
+ *              Capital mensual = capital / cuotas (fijo).
+ *              Ejemplo: $800k, 7%, 6 cuotas → $133.333 + $56.000 = $189.333/mes siempre.
+ *
+ *  'frances' — cuota FIJA (PMT), interés sobre saldo ACTUAL (decrece el saldo).
+ *              La cuota total es siempre la misma pero capital crece e interés baja.
+ *
+ *  'aleman'  — capital FIJO, interés sobre saldo ACTUAL (cuota total DECRECE).
+ *              Primer mes es el más caro, luego baja.
  */
 
 /**
@@ -20,25 +29,24 @@ function calcularPMT(montoCapital, tasaMensual, totalCuotas) {
 /**
  * Calcula el resultado de registrar un pago.
  *
- * Para sistema 'aleman':
- *   cuotaBase = capital / cuotas (porción de capital fija por mes)
- *   cuota_completa = cuotaBase + interés_mes (decrece cada mes)
- *
- * Para sistema 'frances':
- *   cuotaBase = PMT (cuota total fija)
- *   capital_amortizado = PMT - interés_mes (crece cada mes)
- *
  * @param {object} params
  * @param {'cuota_completa'|'solo_interes'|'adelanto_parcial'} params.tipoPago
  * @param {number} params.montoPagado
  * @param {number} params.saldoCapitalActual
  * @param {number} params.tasaMensual - porcentaje (ej: 7 = 7%)
- * @param {number} params.cuotaBase  - para 'aleman': capital/cuotas; para 'frances': PMT
- * @param {'aleman'|'frances'} [params.tipoAmortizacion='aleman']
+ * @param {number} params.cuotaBase
+ *   - flat/aleman: capital / cuotas (porción de capital fija por mes)
+ *   - frances:     PMT (cuota total fija)
+ * @param {'flat'|'frances'|'aleman'} [params.tipoAmortizacion='flat']
+ * @param {number} [params.montoCapitalOriginal] - solo necesario para 'flat'
  */
-function calcularPago({ tipoPago, montoPagado, saldoCapitalActual, tasaMensual, cuotaBase, tipoAmortizacion = 'aleman' }) {
+function calcularPago({ tipoPago, montoPagado, saldoCapitalActual, tasaMensual, cuotaBase, tipoAmortizacion = 'flat', montoCapitalOriginal = null }) {
   const r = tasaMensual / 100;
-  const interesMes = saldoCapitalActual * r;
+
+  // Interés del mes: flat usa capital original (fijo), los demás usan saldo actual
+  const interesMes = tipoAmortizacion === 'flat'
+    ? (montoCapitalOriginal || saldoCapitalActual) * r
+    : saldoCapitalActual * r;
   const interesPagado = interesMes;
 
   let capitalAmortizado;
@@ -47,10 +55,10 @@ function calcularPago({ tipoPago, montoPagado, saldoCapitalActual, tasaMensual, 
     capitalAmortizado = 0;
   } else if (tipoPago === 'cuota_completa') {
     if (tipoAmortizacion === 'frances') {
-      // cuotaBase = PMT (pago total fijo), capital = PMT - interés
+      // cuotaBase = PMT (pago total fijo); capital = PMT - interés del mes
       capitalAmortizado = cuotaBase - interesMes;
     } else {
-      // 'aleman': cuotaBase = porción de capital fija
+      // flat y aleman: cuotaBase = porción de capital fija por mes
       capitalAmortizado = cuotaBase;
     }
   } else {
@@ -67,10 +75,10 @@ function calcularPago({ tipoPago, montoPagado, saldoCapitalActual, tasaMensual, 
   if (saldoCapitalPostPago === 0) {
     cuotasRestantesPostPago = 0;
   } else if (tipoAmortizacion === 'frances') {
-    // n = -log(1 - r×saldo/PMT) / log(1+r)
     const ratio = r * saldoCapitalPostPago / cuotaBase;
     cuotasRestantesPostPago = ratio >= 1 ? 999 : Math.round(-Math.log(1 - ratio) / Math.log(1 + r));
   } else {
+    // flat y aleman: cuotas restantes = saldo / capital mensual
     cuotasRestantesPostPago = Math.ceil(saldoCapitalPostPago / cuotaBase);
   }
 
@@ -85,35 +93,56 @@ function calcularPago({ tipoPago, montoPagado, saldoCapitalActual, tasaMensual, 
 /**
  * Proyecta la tabla de cuotas para un préstamo (sin persistir).
  */
-function calcularProyeccion({ montoCapital, tasaMensual, totalCuotas, tipoAmortizacion = 'aleman' }) {
+function calcularProyeccion({ montoCapital, tasaMensual, totalCuotas, tipoAmortizacion = 'flat' }) {
   const r = tasaMensual / 100;
-  const cuotaBase = tipoAmortizacion === 'frances'
-    ? calcularPMT(montoCapital, tasaMensual, totalCuotas)
-    : montoCapital / totalCuotas;
-
   const tabla = [];
   let saldo = montoCapital;
 
-  for (let i = 1; i <= totalCuotas; i++) {
-    const interes = saldo * r;
-    let capital;
-
-    if (tipoAmortizacion === 'frances') {
-      // Última cuota ajusta diferencias de redondeo
-      capital = i < totalCuotas ? cuotaBase - interes : saldo;
-    } else {
-      capital = i < totalCuotas ? cuotaBase : saldo;
+  if (tipoAmortizacion === 'flat') {
+    // Interés fijo siempre sobre capital original; capital fijo por cuota
+    const cuotaBase = montoCapital / totalCuotas;
+    const interesFijo = montoCapital * r;
+    for (let i = 1; i <= totalCuotas; i++) {
+      const capital = i < totalCuotas ? cuotaBase : saldo; // última ajusta redondeo
+      saldo = Math.max(0, saldo - capital);
+      tabla.push({
+        cuota: i,
+        capitalAmortizado: parseFloat(capital.toFixed(2)),
+        interes: parseFloat(interesFijo.toFixed(2)),
+        cuotaTotal: parseFloat((capital + interesFijo).toFixed(2)),
+        saldoRestante: parseFloat(saldo.toFixed(2)),
+      });
     }
-
-    saldo = Math.max(0, saldo - capital);
-
-    tabla.push({
-      cuota: i,
-      capitalAmortizado: parseFloat(capital.toFixed(2)),
-      interes: parseFloat(interes.toFixed(2)),
-      cuotaTotal: parseFloat((capital + interes).toFixed(2)),
-      saldoRestante: parseFloat(saldo.toFixed(2)),
-    });
+  } else if (tipoAmortizacion === 'frances') {
+    // PMT: cuota total fija, interés sobre saldo, capital creciente
+    const pmt = calcularPMT(montoCapital, tasaMensual, totalCuotas);
+    for (let i = 1; i <= totalCuotas; i++) {
+      const interes = saldo * r;
+      const capital = i < totalCuotas ? pmt - interes : saldo;
+      saldo = Math.max(0, saldo - capital);
+      tabla.push({
+        cuota: i,
+        capitalAmortizado: parseFloat(capital.toFixed(2)),
+        interes: parseFloat(interes.toFixed(2)),
+        cuotaTotal: parseFloat((capital + interes).toFixed(2)),
+        saldoRestante: parseFloat(saldo.toFixed(2)),
+      });
+    }
+  } else {
+    // aleman: capital fijo, interés sobre saldo (cuota total decreciente)
+    const cuotaBase = montoCapital / totalCuotas;
+    for (let i = 1; i <= totalCuotas; i++) {
+      const interes = saldo * r;
+      const capital = i < totalCuotas ? cuotaBase : saldo;
+      saldo = Math.max(0, saldo - capital);
+      tabla.push({
+        cuota: i,
+        capitalAmortizado: parseFloat(capital.toFixed(2)),
+        interes: parseFloat(interes.toFixed(2)),
+        cuotaTotal: parseFloat((capital + interes).toFixed(2)),
+        saldoRestante: parseFloat(saldo.toFixed(2)),
+      });
+    }
   }
 
   return tabla;

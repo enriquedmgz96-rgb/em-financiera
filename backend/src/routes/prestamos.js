@@ -28,9 +28,9 @@ router.post('/', async (req, res, next) => {
   if (!id_cliente || !monto_capital || !tasa_interes_mensual || !total_cuotas || !primer_vencimiento) {
     return res.status(400).json({ error: 'Faltan campos requeridos: id_cliente, monto_capital, tasa_interes_mensual, total_cuotas, primer_vencimiento' });
   }
-  const tipoAmort = (tipo_amortizacion === 'frances') ? 'frances' : 'aleman';
-  // Para 'frances': valor_cuota_base = PMT (cuota total fija)
-  // Para 'aleman':  valor_cuota_base = capital / cuotas (porción de capital fija)
+  const tipoAmort = ['flat', 'frances', 'aleman'].includes(tipo_amortizacion) ? tipo_amortizacion : 'flat';
+  // Frances: valor_cuota_base = PMT (cuota total fija con interés sobre saldo)
+  // Flat/Alemán: valor_cuota_base = capital / cuotas (solo la porción de capital)
   const valor_cuota_base = tipoAmort === 'frances'
     ? parseFloat(calcularPMT(parseFloat(monto_capital), parseFloat(tasa_interes_mensual), parseInt(total_cuotas)).toFixed(2))
     : parseFloat((monto_capital / total_cuotas).toFixed(2));
@@ -66,7 +66,12 @@ router.get('/:id', async (req, res, next) => {
       'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]
     );
     const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagos);
-    const interes_proximo_mes = parseFloat((saldo * (parseFloat(prestamo.tasa_interes_mensual) / 100)).toFixed(2));
+    const tasa = parseFloat(prestamo.tasa_interes_mensual) / 100;
+    // Flat: interés siempre sobre capital original; otros: sobre saldo actual
+    const baseInteres = prestamo.tipo_amortizacion === 'flat'
+      ? parseFloat(prestamo.monto_capital)
+      : saldo;
+    const interes_proximo_mes = parseFloat((baseInteres * tasa).toFixed(2));
     res.json({ ...prestamo, pagos, saldo_capital_actual: saldo, interes_proximo_mes });
   } catch (err) { next(err); }
 });

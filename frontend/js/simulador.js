@@ -35,6 +35,13 @@ async function renderSimulador() {
       </div>
     </div>
 
+    <div style="margin:.75rem 0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <span style="font-size:.85rem;color:#555;font-weight:600">Sistema:</span>
+      <button id="btnFlat" onclick="seleccionarSistema('flat',this)" style="border:2px solid #27ae60;background:#27ae60;color:white;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Clásico (interés plano)</button>
+      <button id="btnFrances" onclick="seleccionarSistema('frances',this)" style="border:2px solid #2980b9;background:white;color:#2980b9;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Francés (PMT)</button>
+      <button id="btnAleman" onclick="seleccionarSistema('aleman',this)" style="border:2px solid #e67e22;background:white;color:#e67e22;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Decreciente</button>
+    </div>
+
     <div id="tablaSim"></div>
 
     <div style="margin-top:2rem;border-top:1px solid #eee;padding-top:1rem">
@@ -54,6 +61,22 @@ async function renderSimulador() {
 
   // Tasa seleccionada por defecto: primera categoría
   let tasaSeleccionada = categorias.length > 0 ? parseFloat(categorias[0].tasa_mensual) : 7.5;
+  window._sistemaSimulador = 'flat';
+
+  window.seleccionarSistema = (sistema, btn) => {
+    window._sistemaSimulador = sistema;
+    const colores = { flat: '#27ae60', frances: '#2980b9', aleman: '#e67e22' };
+    ['btnFlat','btnFrances','btnAleman'].forEach(id => {
+      const b = document.getElementById(id);
+      if (!b) return;
+      b.style.background = 'white';
+      b.style.color = b.style.borderColor;
+    });
+    btn.style.background = btn.style.borderColor;
+    btn.style.color = 'white';
+    const raw = document.getElementById('montoSim').value.replace(/\D/g, '');
+    if (raw) simular(parseInt(raw), tasaSeleccionada, sistema);
+  };
 
   window.seleccionarCategoria = (tasa, btn) => {
     document.querySelectorAll('#btnsCategorias button').forEach(b => {
@@ -65,17 +88,23 @@ async function renderSimulador() {
     btn.style.color = 'white';
     tasaSeleccionada = tasa;
     const raw = document.getElementById('montoSim').value.replace(/\D/g, '');
-    if (raw) simular(parseInt(raw), tasaSeleccionada);
+    if (raw) simular(parseInt(raw), tasaSeleccionada, window._sistemaSimulador);
   };
 
   document.getElementById('montoSim').addEventListener('input', e => {
     const raw = e.target.value.replace(/\D/g, '');
     e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
-    simular(parseInt(raw) || 0, tasaSeleccionada);
+    simular(parseInt(raw) || 0, tasaSeleccionada, window._sistemaSimulador);
   });
 }
 
-function simular(monto, tasaMensual) {
+function calcPMT(capital, tasa, n) {
+  const r = tasa / 100;
+  if (r === 0) return capital / n;
+  return capital * r / (1 - Math.pow(1 + r, -n));
+}
+
+function simular(monto, tasaMensual, sistema = 'flat') {
   const contenedor = document.getElementById('tablaSim');
   if (!monto || monto <= 0) { contenedor.innerHTML = ''; return; }
 
@@ -83,29 +112,53 @@ function simular(monto, tasaMensual) {
   const cuotas = [1,2,3,4,5,6,7,8,9,10,11,12,18];
 
   const filas = cuotas.map(n => {
-    const tasaTotal = tasaMensual * n;
-    const totalFinanciado = monto * (1 + tasaTotal / 100);
-    const precioCuota = totalFinanciado / n;
+    let precioCuota, totalFinanciado, tasaTotal;
+    const r = tasaMensual / 100;
+    tasaTotal = tasaMensual * n;
+
+    if (sistema === 'flat') {
+      // Interés fijo sobre capital original: (capital/n) + capital×tasa
+      precioCuota = (monto / n) + monto * r;
+      totalFinanciado = precioCuota * n;
+    } else if (sistema === 'frances') {
+      // PMT: cuota fija con interés sobre saldo
+      precioCuota = calcPMT(monto, tasaMensual, n);
+      totalFinanciado = precioCuota * n;
+    } else {
+      // Alemán: primer mes (el más caro), interés sobre saldo
+      precioCuota = (monto / n) + monto * r; // = mismo que flat para mes 1
+      totalFinanciado = monto / n * n + monto * r * n * (n + 1) / 2 / n; // aprox. total intereses
+      // Total real = suma de todas las cuotas decrecientes
+      let totalReal = 0, saldo = monto;
+      for (let i = 1; i <= n; i++) {
+        totalReal += (monto / n) + saldo * r;
+        saldo -= monto / n;
+      }
+      totalFinanciado = totalReal;
+    }
     return { n, tasaTotal, totalFinanciado, precioCuota };
   });
+
+  const labels = { flat: 'Clásico — Interés plano', frances: 'Francés — PMT', aleman: 'Decreciente — 1ª cuota' };
+  const colHeader = { flat: 'Cuota mensual (fija)', frances: 'Cuota mensual (fija)', aleman: '1ª cuota (decrece)' };
 
   contenedor.innerHTML = `
     <table>
       <thead>
-        <tr><th>Cuotas</th><th>Tasa total</th><th>Total financiado</th><th>Precio por cuota</th></tr>
+        <tr><th>Cuotas</th><th>Tasa total</th><th>Total a pagar</th><th>${colHeader[sistema] || 'Cuota'}</th></tr>
       </thead>
       <tbody>
         ${filas.map(f => `
           <tr>
             <td><strong>${f.n}x</strong></td>
-            <td>${parseFloat(f.tasaTotal.toFixed(2))}%</td>
+            <td>${parseFloat((tasaMensual * f.n).toFixed(2))}%</td>
             <td>$ ${fmt(f.totalFinanciado)}</td>
             <td>$ ${fmt(f.precioCuota)}</td>
           </tr>`).join('')}
       </tbody>
     </table>
     <div style="margin-top:1rem">
-      <button class="btn-primary" onclick="generarPresupuesto(${monto}, ${tasaMensual})">Generar presupuesto</button>
+      <button class="btn-primary" onclick="generarPresupuesto(${monto}, ${tasaMensual}, '${sistema}')">Generar presupuesto</button>
     </div>
   `;
 }
@@ -142,17 +195,29 @@ async function eliminarCategoria(id) {
   } catch (err) { alert('Error: ' + err.message); }
 }
 
-function generarPresupuesto(monto, tasaMensual) {
+function generarPresupuesto(monto, tasaMensual, sistema = 'flat') {
   const nombre = document.getElementById('nombreSim').value.trim() || 'Cliente';
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 });
   const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const cuotas = [1,2,3,4,5,6,7,8,9,10,11,12,18];
+  const sistemaLabel = { flat: 'Cuota fija clásica (interés plano)', frances: 'Cuota fija francesa (PMT)', aleman: 'Cuota decreciente' }[sistema] || '';
+  const r = tasaMensual / 100;
 
   const filas = cuotas.map(n => {
-    const tasaTotal = tasaMensual * n;
-    const totalFinanciado = monto * (1 + tasaTotal / 100);
-    const precioCuota = totalFinanciado / n;
-    return { n, tasaTotal, totalFinanciado, precioCuota };
+    let precioCuota, totalFinanciado;
+    if (sistema === 'frances') {
+      precioCuota = calcPMT(monto, tasaMensual, n);
+      totalFinanciado = precioCuota * n;
+    } else if (sistema === 'aleman') {
+      let totalReal = 0, saldo = monto;
+      for (let i = 1; i <= n; i++) { totalReal += (monto / n) + saldo * r; saldo -= monto / n; }
+      precioCuota = (monto / n) + monto * r; // primera cuota
+      totalFinanciado = totalReal;
+    } else {
+      precioCuota = (monto / n) + monto * r;
+      totalFinanciado = precioCuota * n;
+    }
+    return { n, tasaTotal: tasaMensual * n, totalFinanciado, precioCuota };
   });
 
   const html = `<!DOCTYPE html>
@@ -186,12 +251,12 @@ function generarPresupuesto(monto, tasaMensual) {
     </div>
   </div>
   <div class="monto-box">
-    <div class="label">Monto solicitado</div>
-    <div class="valor">$ ${fmt(monto)}</div>
+    <div><div class="label">Monto solicitado</div><div class="valor">$ ${fmt(monto)}</div></div>
+    <div style="text-align:right"><div class="label">Sistema</div><div style="font-weight:600;font-size:.95rem">${sistemaLabel}</div></div>
   </div>
   <table>
     <thead>
-      <tr><th>Cuotas</th><th>Tasa total</th><th>Total a pagar</th><th>Valor por cuota</th></tr>
+      <tr><th>Cuotas</th><th>Tasa total</th><th>Total a pagar</th><th>${sistema === 'aleman' ? '1ª cuota' : 'Cuota mensual'}</th></tr>
     </thead>
     <tbody>
       ${filas.map(f => `

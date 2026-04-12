@@ -32,8 +32,10 @@ async function renderPagoForm(prestamoId) {
 
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
   const esFrances = p.tipo_amortizacion === 'frances';
-  // Francés: valor_cuota_base ES el PMT (cuota total fija)
-  // Alemán:  valor_cuota_base es sólo capital; cuota = base + interés del mes
+  // Francés: valor_cuota_base = PMT (cuota total fija)
+  // Flat/Alemán: valor_cuota_base = capital/cuotas; cuota = base + interes_proximo_mes
+  //   (para flat: interes_proximo_mes = capital_original × tasa — siempre fijo)
+  //   (para alemán: interes_proximo_mes = saldo_actual × tasa — decrece)
   const cuotaCompleta = esFrances
     ? parseFloat(p.valor_cuota_base)
     : parseFloat(p.valor_cuota_base) + p.interes_proximo_mes;
@@ -107,7 +109,8 @@ async function renderPagoForm(prestamoId) {
     if (tipo === 'solo_interes') {
       capitalAmort = 0; saldoPost = saldo;
     } else if (tipo === 'cuota_completa') {
-      // Francés: capital = PMT - interés del mes / Alemán: capital = cuota_base fija
+      // Francés: capital = PMT - interés del mes
+      // Flat/Alemán: capital = cuota_base fija (capital/cuotas)
       capitalAmort = esFrances
         ? Math.max(0, cuotaCompleta - interes)
         : cuotaBase;
