@@ -15,9 +15,21 @@ function generarContrato(prestamo, tablaCuotas) {
   return doc;
 }
 
+function _fmtFecha(f) {
+  if (!f) return '-';
+  const iso = (f instanceof Date) ? f.toISOString() : String(f);
+  const [y, m, d] = iso.split('T')[0].split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function _fmtFechaTS(f) {
+  if (!f) return '-';
+  return new Date(f).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 function _escribirContrato(doc, p, tabla, startY, titulo) {
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
-  const fecha = new Date(p.fecha).toLocaleDateString('es-AR');
+  const fecha = _fmtFechaTS(p.fecha);
   const colH = doc.page.height / 2 - 20;
   const col1 = 40, col2 = 300;
 
@@ -42,7 +54,7 @@ function _escribirContrato(doc, p, tabla, startY, titulo) {
   doc.text(`Tasa mensual: ${p.tasa_interes_mensual}%`, col2, y); y += 11;
   doc.text(`Total cuotas: ${p.total_cuotas}`, col1, y);
   doc.text(`Cuota base (capital): $${fmt(p.valor_cuota_base)}`, col2, y); y += 11;
-  doc.text(`Primer vencimiento: ${p.primer_vencimiento}`, col1, y); y += 14;
+  doc.text(`Primer vencimiento: ${_fmtFecha(p.primer_vencimiento)}`, col1, y); y += 14;
 
   const maxFilas = Math.min(tabla.length, 8);
   doc.font('Helvetica-Bold').fontSize(7.5).text('TABLA DE CUOTAS (PROYECTADA)', col1, y); y += 10;
@@ -78,8 +90,8 @@ function _escribirContrato(doc, p, tabla, startY, titulo) {
   doc.moveTo(col1, firmaY).lineTo(col1 + 150, firmaY).lineWidth(0.5).stroke('#000');
   doc.moveTo(col2, firmaY).lineTo(col2 + 150, firmaY).lineWidth(0.5).stroke('#000');
   doc.font('Helvetica').fontSize(7.5).fillColor('#000')
-    .text('Firma y aclaración del cliente', col1, firmaY + 3)
-    .text('Firma y sello de la financiera', col2, firmaY + 3);
+    .text('Firma, aclaración y DNI del cliente', col1, firmaY + 3)
+    .text('Firma, aclaración y DNI del prestamista', col2, firmaY + 3);
   doc.font('Helvetica').fontSize(7).fillColor('#555')
     .text('El cliente declara haber leído y aceptado las condiciones del presente contrato.', col1, firmaY + 16, { width: 510 });
 }
@@ -98,10 +110,8 @@ function generarRecibo(pago, prestamo) {
 
 function _escribirRecibo(doc, pago, p, startY, titulo) {
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
-  // fecha_pago_real es DATE (sin hora), fecha_registro es TIMESTAMPTZ
-  const fechaPago = pago.fecha_pago_real
-    ? String(pago.fecha_pago_real).split('T')[0].split('-').reverse().join('/')
-    : '-';
+  // fecha_pago_real es DATE — pg la devuelve como objeto Date (medianoche UTC)
+  const fechaPago = _fmtFecha(pago.fecha_pago_real);
   const horaRegistro = pago.fecha_registro
     ? new Date(pago.fecha_registro).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' })
     : '';
@@ -134,7 +144,7 @@ function _escribirRecibo(doc, pago, p, startY, titulo) {
   const firmaY = startY + (doc.page.height / 2) - 55;
   doc.font('Helvetica').fontSize(7.5).fillColor('#333').text('Este recibo es válido como constancia de pago.', col1, firmaY - 14);
   doc.moveTo(col2, firmaY).lineTo(col2 + 160, firmaY).lineWidth(0.5).stroke('#000');
-  doc.font('Helvetica').fontSize(7.5).fillColor('#000').text('Firma y sello de la financiera', col2, firmaY + 3);
+  doc.font('Helvetica').fontSize(7.5).fillColor('#000').text('Firma, aclaración y DNI del prestamista', col2, firmaY + 3);
 }
 
 function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
