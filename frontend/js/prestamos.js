@@ -56,7 +56,7 @@ async function renderPrestamoDetalle(id) {
       <div class="card"><div class="label">Interés próx. mes</div><div class="value">$${fmt(p.interes_proximo_mes)}</div></div>
       <div class="card"><div class="label">Tasa mensual</div><div class="value">${parseFloat(p.tasa_interes_mensual)}%</div></div>
       <div class="card"><div class="label">Cuotas</div><div class="value">${p.total_cuotas}</div></div>
-      <div class="card"><div class="label">Cuota según contrato</div><div class="value">$${fmt(parseFloat(p.valor_cuota_base) + parseFloat(p.monto_capital) * parseFloat(p.tasa_interes_mensual) / 100)}</div></div>
+      <div class="card"><div class="label">Cuota según contrato</div><div class="value">$${fmt(p.tipo_amortizacion === 'frances' ? parseFloat(p.valor_cuota_base) : parseFloat(p.valor_cuota_base) + parseFloat(p.monto_capital) * parseFloat(p.tasa_interes_mensual) / 100)}</div><div style="font-size:.7rem;color:#999;margin-top:.2rem">${p.tipo_amortizacion === 'frances' ? 'Cuota fija' : 'Cuota decreciente'}</div></div>
       <div class="card"><div class="label">Moneda</div><div class="value">${p.moneda}</div></div>
     </div>
 
@@ -118,6 +118,16 @@ async function renderPrestamoForm() {
           <option value="ARS">ARS (Pesos)</option>
           <option value="USD">USD (Dólares)</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label>Sistema de amortización *</label>
+        <select name="tipo_amortizacion" id="tipoAmortizacion">
+          <option value="frances">Cuota fija (sistema francés) — recomendado</option>
+          <option value="aleman">Cuota decreciente (sistema alemán)</option>
+        </select>
+        <small id="infoAmortizacion" style="color:#555;margin-top:.3rem;display:block">
+          Cuota fija: siempre pagás el mismo importe. Cuota decreciente: el primer mes pagás más, luego va bajando.
+        </small>
       </div>
       <div class="form-group">
         <label>Monto capital *</label>
@@ -182,6 +192,8 @@ async function renderPrestamoForm() {
     await cargarTasas(e.target.value);
   });
 
+  document.getElementById('tipoAmortizacion').addEventListener('change', actualizarProyeccion);
+
   document.getElementById('selectorCuotas').addEventListener('change', e => {
     const opt = e.target.selectedOptions[0];
     if (!opt.dataset.tasa) return;
@@ -196,10 +208,11 @@ async function renderPrestamoForm() {
     const cap = parseFloat(document.getElementById('montoCapital').value);
     const tasa = parseFloat(document.getElementById('tasaHidden').value);
     const cuotas = parseInt(document.getElementById('selectorCuotas').value);
+    const tipoAmort = document.getElementById('tipoAmortizacion').value;
     if (!cap || !tasa || !cuotas) return;
     try {
       const { tabla, total_intereses } = await api.post('/calcular', {
-        monto_capital: cap, tasa_interes_mensual: tasa, total_cuotas: cuotas
+        monto_capital: cap, tasa_interes_mensual: tasa, total_cuotas: cuotas, tipo_amortizacion: tipoAmort
       });
       const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
       document.getElementById('proyeccion').innerHTML = `
