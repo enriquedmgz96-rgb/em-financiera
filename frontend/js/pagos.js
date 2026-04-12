@@ -3,7 +3,7 @@ async function renderPagos() {
   const prestamos = await api.get('/prestamos?estado=activo').catch(() => []);
 
   app.innerHTML = `
-    <h2>Registrar Pago</h2>
+    <h2>Registrar pago</h2>
     <form id="formBuscar" style="margin-bottom:1.5rem;display:flex;gap:.75rem;align-items:flex-end">
       <div class="form-group" style="flex:1;margin:0">
         <label>Préstamo activo</label>
@@ -31,30 +31,60 @@ async function renderPagoForm(prestamoId) {
   if (!p) { app.innerHTML = '<p class="msg-error">Préstamo no encontrado.</p>'; return; }
 
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+
+  const saldo     = parseFloat(p.saldo_capital_actual);
+  const interes   = parseFloat(p.interes_proximo_mes);
+  const cuotaBase = parseFloat(p.valor_cuota_base);
   const esFrances = p.tipo_amortizacion === 'frances';
-  // Francés: valor_cuota_base = PMT (cuota total fija)
-  // Flat/Alemán: valor_cuota_base = capital/cuotas; cuota = base + interes_proximo_mes
-  //   (para flat: interes_proximo_mes = capital_original × tasa — siempre fijo)
-  //   (para alemán: interes_proximo_mes = saldo_actual × tasa — decrece)
-  const cuotaCompleta = esFrances
-    ? parseFloat(p.valor_cuota_base)
-    : parseFloat(p.valor_cuota_base) + p.interes_proximo_mes;
+
+  // Deuda total máxima pagable: no se puede pagar más que esto
+  const maxPagable = parseFloat((saldo + interes).toFixed(2));
+
+  // Capital que corresponde a ESTA cuota específica
+  // Si el saldo es menor que la cuota base, es la última cuota (ajustada)
+  const capitalEstaCuota = esFrances
+    ? Math.min(saldo, Math.max(0, cuotaBase - interes))   // PMT: capital = PMT - interés
+    : Math.min(saldo, cuotaBase);                          // flat/alemán: capital fijo, limitado al saldo
+
+  // Cuota real de este mes (puede ser menor en la última)
+  const cuotaCompleta = parseFloat((capitalEstaCuota + interes).toFixed(2));
+
+  const esUltimaCuota = saldo < cuotaBase;
   const nroCuotaActual = p.pagos.length + 1;
 
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>Registrar pago — ${p.apellido}, ${p.nombre}</h2>
-      <button class="btn-secondary" onclick="renderPagos()">← Volver</button>
+      <button class="btn-secondary" onclick="renderPrestamoDetalle(${prestamoId})">← Volver</button>
     </div>
-    <div style="background:#e8f4fd;border-left:4px solid #2980b9;padding:.6rem 1rem;border-radius:4px;margin-bottom:1rem;font-size:.95rem">
-      Registrando <strong>cuota ${nroCuotaActual} de ${p.total_cuotas}</strong>
-      ${nroCuotaActual > p.total_cuotas ? ' <span style="color:var(--rojo)">(préstamo en adelanto)</span>' : ''}
+
+    <div style="background:${esUltimaCuota ? 'var(--gold-light)' : 'var(--verde-tint)'};border-left:3px solid ${esUltimaCuota ? 'var(--gold)' : 'var(--verde-mid)'};padding:.65rem 1rem;border-radius:var(--radius);margin-bottom:1.25rem;font-size:.875rem;color:var(--ink-2)">
+      ${esUltimaCuota
+        ? `<strong>Última cuota</strong> — El cliente adeuda menos de una cuota completa. El monto sugerido es el saldo total con intereses.`
+        : `Registrando <strong>cuota ${nroCuotaActual} de ${p.total_cuotas}</strong>`
+      }
     </div>
+
     <div class="cards" style="margin-bottom:1.5rem">
-      <div class="card"><div class="label">Saldo capital</div><div class="value">$${fmt(p.saldo_capital_actual)}</div></div>
-      <div class="card"><div class="label">Interés del mes</div><div class="value">$${fmt(p.interes_proximo_mes)}</div></div>
-      <div class="card"><div class="label">Cuota base (capital)</div><div class="value">$${fmt(p.valor_cuota_base)}</div></div>
-      <div class="card"><div class="label">Cuota completa</div><div class="value">$${fmt(cuotaCompleta)}</div></div>
+      <div class="card">
+        <div class="label">Saldo capital</div>
+        <div class="value">$${fmt(saldo)}</div>
+      </div>
+      <div class="card">
+        <div class="label">Interés del mes</div>
+        <div class="value">$${fmt(interes)}</div>
+        <div style="font-size:.72rem;color:var(--ink-4);margin-top:.3rem">${p.tipo_amortizacion === 'flat' ? 'sobre capital original' : 'sobre saldo actual'}</div>
+      </div>
+      <div class="card">
+        <div class="label">Capital esta cuota</div>
+        <div class="value">$${fmt(capitalEstaCuota)}</div>
+        ${esUltimaCuota ? `<div style="font-size:.72rem;color:var(--gold);margin-top:.3rem;font-weight:600">Cuota ajustada</div>` : ''}
+      </div>
+      <div class="card" style="${esUltimaCuota ? 'border-color:rgba(154,123,63,.4);background:var(--gold-light)' : ''}">
+        <div class="label">Próxima cuota</div>
+        <div class="value" style="color:${esUltimaCuota ? 'var(--gold)' : 'var(--ink)'}">$${fmt(cuotaCompleta)}</div>
+        <div style="font-size:.72rem;color:var(--ink-4);margin-top:.3rem">máx. pagable: $${fmt(maxPagable)}</div>
+      </div>
     </div>
 
     <form id="formPago" style="max-width:500px">
@@ -62,19 +92,23 @@ async function renderPagoForm(prestamoId) {
         <label>Fecha del pago *</label>
         <input name="fecha_pago_real" type="date" required value="${new Date().toISOString().split('T')[0]}" />
       </div>
+
       <div class="form-group">
         <label>Tipo de pago</label>
         <select name="tipo_pago" id="tipoPago">
-          <option value="cuota_completa">Cuota completa ($${fmt(cuotaCompleta)})</option>
-          <option value="solo_interes">Solo interés ($${fmt(p.interes_proximo_mes)})</option>
-          <option value="adelanto_parcial">Monto libre (adelanto)</option>
+          <option value="cuota_completa">Cuota completa — $${fmt(cuotaCompleta)}</option>
+          <option value="solo_interes">Solo interés — $${fmt(interes)}</option>
+          <option value="adelanto_parcial">Monto libre (adelanto de capital)</option>
         </select>
       </div>
+
       <div class="form-group">
         <label>Monto a pagar</label>
         <input name="monto_pagado" id="montoPagado" type="text" value="$ ${Math.round(cuotaCompleta).toLocaleString('es-AR')}" />
         <input type="hidden" id="montoPagadoRaw" value="${cuotaCompleta.toFixed(2)}" />
+        <div id="montoMsg" style="font-size:.78rem;margin-top:.3rem;display:none"></div>
       </div>
+
       <div class="form-group">
         <label>Forma de pago</label>
         <select name="forma_pago">
@@ -85,59 +119,84 @@ async function renderPagoForm(prestamoId) {
           <option value="otro">Otro</option>
         </select>
       </div>
-      <div class="form-group"><label>Observaciones</label><textarea name="observaciones"></textarea></div>
+
+      <div class="form-group">
+        <label>Observaciones</label>
+        <textarea name="observaciones"></textarea>
+      </div>
 
       <div id="preview" class="preview-box" style="display:none"></div>
 
-      <button type="submit" class="btn-primary" style="margin-left:0">Confirmar pago</button>
-      <div id="pagoMsg"></div>
+      <div style="margin-top:1rem">
+        <button type="submit" class="btn-primary" id="btnConfirmar" style="margin-left:0">Confirmar pago</button>
+      </div>
+      <div id="pagoMsg" style="margin-top:.5rem"></div>
     </form>
   `;
 
-  const tipoPagoEl = document.getElementById('tipoPago');
+  const tipoPagoEl   = document.getElementById('tipoPago');
   const montoPagadoEl = document.getElementById('montoPagado');
-  const previewEl = document.getElementById('preview');
+  const montoRawEl   = document.getElementById('montoPagadoRaw');
+  const previewEl    = document.getElementById('preview');
+  const montoMsgEl   = document.getElementById('montoMsg');
+  const btnConfirmar = document.getElementById('btnConfirmar');
 
   function actualizarPreview() {
-    const tipo = tipoPagoEl.value;
+    const tipo  = tipoPagoEl.value;
     const monto = parseFloat(montoRawEl.value) || 0;
-    const saldo = p.saldo_capital_actual;
-    const interes = p.interes_proximo_mes;
-    const cuotaBase = parseFloat(p.valor_cuota_base);
 
-    let capitalAmort, saldoPost;
+    let capitalAmort, saldoPost, error = null;
+
     if (tipo === 'solo_interes') {
-      capitalAmort = 0; saldoPost = saldo;
+      capitalAmort = 0;
+      saldoPost    = saldo;
     } else if (tipo === 'cuota_completa') {
-      // Francés: capital = PMT - interés del mes
-      // Flat/Alemán: capital = cuota_base fija (capital/cuotas)
-      capitalAmort = esFrances
-        ? Math.max(0, cuotaCompleta - interes)
-        : cuotaBase;
-      capitalAmort = Math.min(capitalAmort, saldo);
-      saldoPost = Math.max(0, saldo - capitalAmort);
+      capitalAmort = Math.min(capitalEstaCuota, saldo);
+      saldoPost    = Math.max(0, saldo - capitalAmort);
     } else {
-      capitalAmort = Math.max(0, Math.min(monto - interes, saldo));
-      saldoPost = Math.max(0, saldo - capitalAmort);
+      // adelanto_parcial — validar tope
+      if (monto > maxPagable) {
+        error = `El monto máximo pagable es $${fmt(maxPagable)} (saldo + intereses). No se puede cobrar más de lo que se debe.`;
+      }
+      const montoEfectivo = Math.min(monto, maxPagable);
+      capitalAmort = Math.min(Math.max(0, montoEfectivo - interes), saldo);
+      saldoPost    = Math.max(0, saldo - capitalAmort);
+    }
+
+    // Mostrar/ocultar error de monto
+    if (error) {
+      montoMsgEl.style.display = 'block';
+      montoMsgEl.style.color = 'var(--rojo)';
+      montoMsgEl.textContent = error;
+      btnConfirmar.disabled = true;
+      btnConfirmar.style.opacity = '0.5';
+    } else {
+      montoMsgEl.style.display = 'none';
+      btnConfirmar.disabled = false;
+      btnConfirmar.style.opacity = '';
     }
 
     previewEl.style.display = 'block';
     previewEl.innerHTML = `
-      <strong>Vista previa:</strong><br>
+      <strong>Vista previa del registro:</strong><br>
       Capital amortizado: <strong>$${fmt(capitalAmort)}</strong> &nbsp;|&nbsp;
       Interés pagado: <strong>$${fmt(interes)}</strong> &nbsp;|&nbsp;
-      Saldo post-pago: <strong>$${fmt(saldoPost)}</strong>
+      Saldo post-pago: <strong style="color:${saldoPost === 0 ? 'var(--verde)' : 'var(--ink)'}">$${fmt(saldoPost)}</strong>
+      ${saldoPost === 0 ? ' &nbsp;<span style="color:var(--verde);font-weight:600">✓ Cancela el préstamo</span>' : ''}
     `;
   }
 
-  const montoRawEl = document.getElementById('montoPagadoRaw');
-
   function setMonto(valor, editable = false) {
-    montoPagadoEl.value = '$ ' + Math.round(valor).toLocaleString('es-AR');
-    montoRawEl.value = valor.toFixed(2);
+    const v = Math.min(valor, maxPagable); // nunca proponer más del máximo
+    montoPagadoEl.value = '$ ' + Math.round(v).toLocaleString('es-AR');
+    montoRawEl.value    = v.toFixed(2);
     montoPagadoEl.readOnly = !editable;
-    montoPagadoEl.style.background = editable ? '' : '#f0f0f0';
-    montoPagadoEl.style.cursor = editable ? '' : 'not-allowed';
+    montoPagadoEl.style.background = editable ? '' : 'var(--bg)';
+    montoPagadoEl.style.cursor     = editable ? '' : 'default';
+    montoPagadoEl.style.color      = editable ? '' : 'var(--ink-2)';
+    montoMsgEl.style.display = 'none';
+    btnConfirmar.disabled = false;
+    btnConfirmar.style.opacity = '';
   }
 
   montoPagadoEl.addEventListener('input', e => {
@@ -149,20 +208,32 @@ async function renderPagoForm(prestamoId) {
   });
 
   tipoPagoEl.addEventListener('change', () => {
-    if (tipoPagoEl.value === 'cuota_completa') setMonto(cuotaCompleta, false);
-    else if (tipoPagoEl.value === 'solo_interes') setMonto(p.interes_proximo_mes, false);
-    else { setMonto(cuotaCompleta, true); } // adelanto_parcial: editable
+    const tipo = tipoPagoEl.value;
+    if (tipo === 'cuota_completa')    setMonto(cuotaCompleta, false);
+    else if (tipo === 'solo_interes') setMonto(interes, false);
+    else {
+      // adelanto_parcial: editable, valor inicial = cuota completa pero sin bloquear
+      setMonto(cuotaCompleta, true);
+    }
     actualizarPreview();
   });
 
-  // Estado inicial: cuota_completa bloqueado
+  // Estado inicial
   setMonto(cuotaCompleta, false);
   actualizarPreview();
 
   document.getElementById('formPago').addEventListener('submit', async e => {
     e.preventDefault();
+    if (btnConfirmar.disabled) return;
+
+    const raw = parseFloat(montoRawEl.value) || 0;
+    if (raw > maxPagable) {
+      document.getElementById('pagoMsg').innerHTML = `<span class="msg-error">El monto no puede superar la deuda total de $${fmt(maxPagable)}.</span>`;
+      return;
+    }
+
     const fd = Object.fromEntries(new FormData(e.target).entries());
-    fd.id_prestamo = prestamoId;
+    fd.id_prestamo  = prestamoId;
     fd.monto_pagado = montoRawEl.value;
     const msg = document.getElementById('pagoMsg');
     try {
