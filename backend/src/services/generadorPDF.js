@@ -140,8 +140,20 @@ function _escribirRecibo(doc, pago, p, startY, titulo) {
 function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
   const doc = new PDFDocument({ size: 'A4', margins: { top: 40, bottom: 40, left: 40, right: 40 } });
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
-  const fmtFecha = f => f ? String(f).split('T')[0].split('-').reverse().join('/') : '-';
-  const hoy = new Date().toLocaleDateString('es-AR');
+  // Maneja tanto objetos Date (pg los devuelve así para DATE) como strings ISO
+  const fmtFecha = f => {
+    if (!f) return '-';
+    const iso = (f instanceof Date) ? f.toISOString() : String(f);
+    const [y, m, d] = iso.split('T')[0].split('-');
+    return `${d}/${m}/${y}`;
+  };
+  // Para TIMESTAMPTZ: solo mostrar la parte de fecha sin hora
+  const fmtFechaTS = f => {
+    if (!f) return '-';
+    const d = new Date(f);
+    return d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba', day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+  const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba', day: '2-digit', month: '2-digit', year: 'numeric' });
   const W = doc.page.width - 80;
 
   // Encabezado
@@ -165,7 +177,7 @@ function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
   // Resumen del préstamo — cajas de estado
   doc.font('Helvetica-Bold').fontSize(9).fillColor('#2c3e50').text('CONDICIONES DEL PRÉSTAMO', 40, y); y += 13;
   doc.font('Helvetica').fontSize(9).fillColor('#000');
-  doc.text(`Préstamo N°: ${prestamo.id}`, 40, y); doc.text(`Moneda: ${prestamo.moneda}`, 200, y); doc.text(`Fecha otorgamiento: ${fmtFecha(prestamo.fecha)}`, 320, y); y += 12;
+  doc.text(`Préstamo N°: ${prestamo.id}`, 40, y); doc.text(`Moneda: ${prestamo.moneda}`, 200, y); doc.text(`Fecha otorgamiento: ${fmtFechaTS(prestamo.fecha)}`, 320, y); y += 12;
   doc.text(`Capital original: $${fmt(prestamo.monto_capital)}`, 40, y); doc.text(`Tasa mensual: ${parseFloat(prestamo.tasa_interes_mensual)}%`, 200, y); doc.text(`Total cuotas: ${prestamo.total_cuotas}`, 320, y); y += 12;
   doc.text(`Primer vencimiento: ${fmtFecha(prestamo.primer_vencimiento)}`, 40, y); y += 20;
 
@@ -231,11 +243,16 @@ function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
 
   // Próximo vencimiento
   if (prestamo.estado !== 'cancelado') {
-    const proxVcto = new Date(prestamo.primer_vencimiento);
-    proxVcto.setMonth(proxVcto.getMonth() + pagos.length);
+    // Calcular próximo vencimiento usando partes de fecha para evitar problemas de timezone
+    const pvISO = (prestamo.primer_vencimiento instanceof Date)
+      ? prestamo.primer_vencimiento.toISOString().split('T')[0]
+      : String(prestamo.primer_vencimiento).split('T')[0];
+    const [pvY, pvM, pvD] = pvISO.split('-').map(Number);
+    const proxDate = new Date(pvY, pvM - 1 + pagos.length, pvD);
+    const proxVctoStr = `${String(proxDate.getDate()).padStart(2,'0')}/${String(proxDate.getMonth()+1).padStart(2,'0')}/${proxDate.getFullYear()}`;
     doc.moveTo(40, y).lineTo(doc.page.width - 40, y).lineWidth(0.5).stroke('#dee2e6'); y += 8;
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#2c3e50')
-      .text(`Próximo vencimiento estimado: ${proxVcto.toLocaleDateString('es-AR')}   |   Interés estimado: $${fmt(interesProxMes)}`, 40, y);
+      .text(`Próximo vencimiento estimado: ${proxVctoStr}   |   Interés estimado: $${fmt(interesProxMes)}`, 40, y);
     y += 18;
   }
 
