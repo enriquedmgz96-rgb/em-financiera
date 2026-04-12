@@ -119,12 +119,16 @@ async function renderPagoForm(prestamoId) {
 
   const montoRawEl = document.getElementById('montoPagadoRaw');
 
-  function setMonto(valor) {
+  function setMonto(valor, editable = false) {
     montoPagadoEl.value = '$ ' + Math.round(valor).toLocaleString('es-AR');
     montoRawEl.value = valor.toFixed(2);
+    montoPagadoEl.readOnly = !editable;
+    montoPagadoEl.style.background = editable ? '' : '#f0f0f0';
+    montoPagadoEl.style.cursor = editable ? '' : 'not-allowed';
   }
 
   montoPagadoEl.addEventListener('input', e => {
+    if (montoPagadoEl.readOnly) return;
     const raw = e.target.value.replace(/\D/g, '');
     e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
     montoRawEl.value = raw || '0';
@@ -132,10 +136,14 @@ async function renderPagoForm(prestamoId) {
   });
 
   tipoPagoEl.addEventListener('change', () => {
-    if (tipoPagoEl.value === 'cuota_completa') setMonto(cuotaCompleta);
-    else if (tipoPagoEl.value === 'solo_interes') setMonto(p.interes_proximo_mes);
+    if (tipoPagoEl.value === 'cuota_completa') setMonto(cuotaCompleta, false);
+    else if (tipoPagoEl.value === 'solo_interes') setMonto(p.interes_proximo_mes, false);
+    else { setMonto(cuotaCompleta, true); } // adelanto_parcial: editable
     actualizarPreview();
   });
+
+  // Estado inicial: cuota_completa bloqueado
+  setMonto(cuotaCompleta, false);
   actualizarPreview();
 
   document.getElementById('formPago').addEventListener('submit', async e => {
