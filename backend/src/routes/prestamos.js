@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
 const { saldoCapitalActual, calcularProyeccion } = require('../services/motorCuotas');
-const { generarContrato } = require('../services/generadorPDF');
+const { generarContrato, generarResumen } = require('../services/generadorPDF');
 
 router.get('/', async (req, res, next) => {
   try {
@@ -99,6 +99,28 @@ router.get('/:id/contrato', async (req, res, next) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
     const doc = generarContrato(prestamo, tabla);
+    doc.pipe(res);
+  } catch (err) { next(err); }
+});
+
+router.get('/:id/resumen', async (req, res, next) => {
+  try {
+    const { rows: prestamos } = await pool.query(
+      `SELECT p.*, c.nombre, c.apellido, c.dni, c.cuit, c.telefono
+       FROM prestamos p JOIN clientes c ON c.id = p.id_cliente WHERE p.id = $1`,
+      [req.params.id]
+    );
+    if (prestamos.length === 0) return res.status(404).json({ error: 'Préstamo no encontrado' });
+    const prestamo = prestamos[0];
+    const { rows: pagos } = await pool.query(
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]
+    );
+    const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagos);
+    const interesProxMes = parseFloat((saldo * (parseFloat(prestamo.tasa_interes_mensual) / 100)).toFixed(2));
+    const nombreArchivo = `resumen-prestamo-${prestamo.id}-${prestamo.apellido.toLowerCase()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    const doc = generarResumen(prestamo, pagos, saldo, interesProxMes);
     doc.pipe(res);
   } catch (err) { next(err); }
 });
