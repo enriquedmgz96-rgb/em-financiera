@@ -56,7 +56,15 @@ async function renderPrestamoDetalle(id) {
       <div class="card"><div class="label">Interés próx. mes</div><div class="value">$${fmt(p.interes_proximo_mes)}</div></div>
       <div class="card"><div class="label">Tasa mensual</div><div class="value">${parseFloat(p.tasa_interes_mensual)}%</div></div>
       <div class="card"><div class="label">Cuotas</div><div class="value">${p.total_cuotas}</div></div>
-      <div class="card"><div class="label">Cuota según contrato</div><div class="value">$${fmt(p.tipo_amortizacion === 'frances' ? parseFloat(p.valor_cuota_base) : parseFloat(p.valor_cuota_base) + parseFloat(p.monto_capital) * parseFloat(p.tasa_interes_mensual) / 100)}</div><div style="font-size:.7rem;color:#999;margin-top:.2rem">${p.tipo_amortizacion === 'frances' ? 'Cuota fija' : 'Cuota decreciente'}</div></div>
+      <div class="card"><div class="label">Cuota según contrato</div><div class="value">$${fmt(
+        p.tipo_amortizacion === 'frances'
+          ? parseFloat(p.valor_cuota_base)  // PMT
+          : p.tipo_amortizacion === 'flat'
+            ? parseFloat(p.valor_cuota_base) + parseFloat(p.monto_capital) * parseFloat(p.tasa_interes_mensual) / 100  // capital/n + capital×tasa
+            : parseFloat(p.valor_cuota_base) + parseFloat(p.monto_capital) * parseFloat(p.tasa_interes_mensual) / 100  // alemán: primer mes
+      )}</div><div style="font-size:.7rem;color:#999;margin-top:.2rem">${
+        p.tipo_amortizacion === 'frances' ? 'Cuota fija (PMT)' : p.tipo_amortizacion === 'flat' ? 'Cuota fija clásica' : 'Primera cuota (decreciente)'
+      }</div></div>
       <div class="card"><div class="label">Moneda</div><div class="value">${p.moneda}</div></div>
     </div>
 
@@ -122,11 +130,12 @@ async function renderPrestamoForm() {
       <div class="form-group">
         <label>Sistema de amortización *</label>
         <select name="tipo_amortizacion" id="tipoAmortizacion">
-          <option value="frances">Cuota fija (sistema francés) — recomendado</option>
-          <option value="aleman">Cuota decreciente (sistema alemán)</option>
+          <option value="flat">Cuota fija clásica — interés sobre capital original (recomendado)</option>
+          <option value="frances">Cuota fija francesa — interés sobre saldo (PMT)</option>
+          <option value="aleman">Cuota decreciente — interés sobre saldo</option>
         </select>
         <small id="infoAmortizacion" style="color:#555;margin-top:.3rem;display:block">
-          Cuota fija: siempre pagás el mismo importe. Cuota decreciente: el primer mes pagás más, luego va bajando.
+          Clásica: siempre la misma cuota, interés calculado sobre el capital original · Francesa: cuota fija pero menor, interés sobre saldo · Decreciente: primer mes más caro, luego baja
         </small>
       </div>
       <div class="form-group">
