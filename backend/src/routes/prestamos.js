@@ -128,7 +128,12 @@ router.get('/:id/resumen', async (req, res, next) => {
       'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]
     );
     const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagos);
-    const interesProxMes = parseFloat((saldo * (parseFloat(prestamo.tasa_interes_mensual) / 100)).toFixed(2));
+    const tasa = parseFloat(prestamo.tasa_interes_mensual) / 100;
+    // Flat: interés siempre sobre capital original; otros: sobre saldo actual
+    const baseIntResumen = prestamo.tipo_amortizacion === 'flat'
+      ? parseFloat(prestamo.monto_capital)
+      : saldo;
+    const interesProxMes = parseFloat((baseIntResumen * tasa).toFixed(2));
     const nombreArchivo = `resumen-prestamo-${prestamo.id}-${prestamo.apellido.toLowerCase()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
