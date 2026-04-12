@@ -27,7 +27,7 @@ router.get('/', async (req, res, next) => {
       SELECT p.id, p.monto_capital, p.primer_vencimiento,
              c.nombre, c.apellido, c.dni, c.telefono,
              COUNT(pg.id) AS nro_pagos,
-             (p.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date AS proximo_vencimiento
+             TO_CHAR((p.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM prestamos p
       JOIN clientes c ON c.id = p.id_cliente
       LEFT JOIN pagos pg ON pg.id_prestamo = p.id
@@ -39,7 +39,7 @@ router.get('/', async (req, res, next) => {
       SELECT p.id, p.monto_capital, p.tasa_interes_mensual, p.valor_cuota_base,
              p.primer_vencimiento, c.nombre, c.apellido, c.dni, c.telefono,
              COUNT(pg.id) AS nro_pagos,
-             (p.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date AS proximo_vencimiento
+             TO_CHAR((p.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM prestamos p
       JOIN clientes c ON c.id = p.id_cliente
       LEFT JOIN pagos pg ON pg.id_prestamo = p.id
@@ -47,7 +47,7 @@ router.get('/', async (req, res, next) => {
       GROUP BY p.id, c.id
       HAVING (p.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date
              BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-      ORDER BY proximo_vencimiento
+      ORDER BY (p.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date
     `);
     res.json({
       capital_total_prestado: parseFloat(totales.capital_total_prestado),
