@@ -185,11 +185,28 @@ function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
   doc.text(`Teléfono: ${prestamo.telefono || '-'}`, 320, y); y += 18;
 
   // Resumen del préstamo — cajas de estado
+  // Calcular cuota mensual según sistema
+  const tasa = parseFloat(prestamo.tasa_interes_mensual) / 100;
+  const cuotaBaseNum = parseFloat(prestamo.valor_cuota_base);
+  const capitalOrig  = parseFloat(prestamo.monto_capital);
+  let cuotaMensualStr;
+  if (prestamo.tipo_amortizacion === 'flat') {
+    const c = cuotaBaseNum + capitalOrig * tasa;
+    cuotaMensualStr = `$${fmt(c)} fija (interés plano)`;
+  } else if (prestamo.tipo_amortizacion === 'frances') {
+    cuotaMensualStr = `$${fmt(cuotaBaseNum)} fija (sistema francés)`;
+  } else {
+    cuotaMensualStr = `$${fmt(cuotaBaseNum + capitalOrig * tasa)} 1ª cuota, decreciente (sistema alemán)`;
+  }
+
   doc.font('Helvetica-Bold').fontSize(9).fillColor('#2c3e50').text('CONDICIONES DEL PRÉSTAMO', 40, y); y += 13;
   doc.font('Helvetica').fontSize(9).fillColor('#000');
   doc.text(`Préstamo N°: ${prestamo.id}`, 40, y); doc.text(`Moneda: ${prestamo.moneda}`, 200, y); doc.text(`Fecha otorgamiento: ${fmtFechaTS(prestamo.fecha)}`, 320, y); y += 12;
   doc.text(`Capital original: $${fmt(prestamo.monto_capital)}`, 40, y); doc.text(`Tasa mensual: ${parseFloat(prestamo.tasa_interes_mensual)}%`, 200, y); doc.text(`Total cuotas: ${prestamo.total_cuotas}`, 320, y); y += 12;
-  doc.text(`Primer vencimiento: ${fmtFecha(prestamo.primer_vencimiento)}`, 40, y); y += 20;
+  doc.text(`Primer vencimiento: ${fmtFecha(prestamo.primer_vencimiento)}`, 40, y);
+  // Cuota mensual en negrita destacada
+  doc.font('Helvetica-Bold').fillColor('#1a5c3a').text(`Cuota mensual: ${cuotaMensualStr}`, 250, y); y += 20;
+  doc.font('Helvetica').fillColor('#000');
 
   // Cajas de estado actual
   const cajas = [
