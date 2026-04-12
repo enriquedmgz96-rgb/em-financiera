@@ -46,7 +46,17 @@ async function renderPrestamoDetalle(id) {
 
   app.innerHTML = `
     <div class="seccion-titulo">
-      <h2>Préstamo #${p.id} — ${p.apellido}, ${p.nombre}</h2>
+      <h2>Préstamo #${p.id} — ${p.apellido}, ${p.nombre}
+        <span style="font-size:.75rem;font-weight:600;padding:.2rem .7rem;border-radius:12px;margin-left:.75rem;vertical-align:middle;${
+          p.tipo_amortizacion === 'flat' ? 'background:#d5f5e3;color:#27ae60' :
+          p.tipo_amortizacion === 'frances' ? 'background:#d6eaf8;color:#2980b9' :
+          'background:#fef9e7;color:#e67e22'
+        }">${
+          p.tipo_amortizacion === 'flat' ? 'Cuota fija clásica' :
+          p.tipo_amortizacion === 'frances' ? 'Cuota fija francesa' :
+          'Cuota decreciente'
+        }</span>
+      </h2>
       <button class="btn-secondary" onclick="renderPrestamos()">← Volver</button>
     </div>
     <div class="cards" style="margin-bottom:1.5rem">
