@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
-const { saldoCapitalActual, calcularProyeccion } = require('../services/motorCuotas');
+const { saldoCapitalActual, calcularProyeccion, calcularPMT } = require('../services/motorCuotas');
 const { generarContrato, generarResumen } = require('../services/generadorPDF');
 
 router.get('/', async (req, res, next) => {
@@ -24,21 +24,27 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   const { id_cliente, moneda, monto_capital, tasa_interes_mensual, total_cuotas,
     primer_vencimiento, pagare_firmado, motivo, nombre_garantia,
-    telefono_garantia, dni_garantia, observaciones } = req.body;
+    telefono_garantia, dni_garantia, observaciones, tipo_amortizacion } = req.body;
   if (!id_cliente || !monto_capital || !tasa_interes_mensual || !total_cuotas || !primer_vencimiento) {
     return res.status(400).json({ error: 'Faltan campos requeridos: id_cliente, monto_capital, tasa_interes_mensual, total_cuotas, primer_vencimiento' });
   }
-  const valor_cuota_base = parseFloat((monto_capital / total_cuotas).toFixed(2));
+  const tipoAmort = (tipo_amortizacion === 'frances') ? 'frances' : 'aleman';
+  // Para 'frances': valor_cuota_base = PMT (cuota total fija)
+  // Para 'aleman':  valor_cuota_base = capital / cuotas (porción de capital fija)
+  const valor_cuota_base = tipoAmort === 'frances'
+    ? parseFloat(calcularPMT(parseFloat(monto_capital), parseFloat(tasa_interes_mensual), parseInt(total_cuotas)).toFixed(2))
+    : parseFloat((monto_capital / total_cuotas).toFixed(2));
   try {
     const { rows } = await pool.query(
       `INSERT INTO prestamos
          (id_cliente, moneda, monto_capital, tasa_interes_mensual, total_cuotas,
           valor_cuota_base, primer_vencimiento, estado, pagare_firmado, motivo,
-          nombre_garantia, telefono_garantia, dni_garantia, observaciones)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'activo',$8,$9,$10,$11,$12,$13) RETURNING *`,
+          nombre_garantia, telefono_garantia, dni_garantia, observaciones, tipo_amortizacion)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'activo',$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [id_cliente, moneda || 'ARS', monto_capital, tasa_interes_mensual, total_cuotas,
         valor_cuota_base, primer_vencimiento, pagare_firmado || false, motivo || null,
-        nombre_garantia || null, telefono_garantia || null, dni_garantia || null, observaciones || null]
+        nombre_garantia || null, telefono_garantia || null, dni_garantia || null, observaciones || null,
+        tipoAmort]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -94,6 +100,7 @@ router.get('/:id/contrato', async (req, res, next) => {
       montoCapital: parseFloat(prestamo.monto_capital),
       tasaMensual: parseFloat(prestamo.tasa_interes_mensual),
       totalCuotas: parseInt(prestamo.total_cuotas),
+      tipoAmortizacion: prestamo.tipo_amortizacion || 'aleman',
     });
     const nombreArchivo = `contrato-prestamo-${prestamo.id}-${prestamo.apellido.toLowerCase()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');

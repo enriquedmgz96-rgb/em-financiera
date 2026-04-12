@@ -31,7 +31,12 @@ async function renderPagoForm(prestamoId) {
   if (!p) { app.innerHTML = '<p class="msg-error">Préstamo no encontrado.</p>'; return; }
 
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
-  const cuotaCompleta = parseFloat(p.valor_cuota_base) + p.interes_proximo_mes;
+  const esFrances = p.tipo_amortizacion === 'frances';
+  // Francés: valor_cuota_base ES el PMT (cuota total fija)
+  // Alemán:  valor_cuota_base es sólo capital; cuota = base + interés del mes
+  const cuotaCompleta = esFrances
+    ? parseFloat(p.valor_cuota_base)
+    : parseFloat(p.valor_cuota_base) + p.interes_proximo_mes;
   const nroCuotaActual = p.pagos.length + 1;
 
   app.innerHTML = `
@@ -102,7 +107,12 @@ async function renderPagoForm(prestamoId) {
     if (tipo === 'solo_interes') {
       capitalAmort = 0; saldoPost = saldo;
     } else if (tipo === 'cuota_completa') {
-      capitalAmort = cuotaBase; saldoPost = Math.max(0, saldo - cuotaBase);
+      // Francés: capital = PMT - interés del mes / Alemán: capital = cuota_base fija
+      capitalAmort = esFrances
+        ? Math.max(0, cuotaCompleta - interes)
+        : cuotaBase;
+      capitalAmort = Math.min(capitalAmort, saldo);
+      saldoPost = Math.max(0, saldo - capitalAmort);
     } else {
       capitalAmort = Math.max(0, Math.min(monto - interes, saldo));
       saldoPost = Math.max(0, saldo - capitalAmort);

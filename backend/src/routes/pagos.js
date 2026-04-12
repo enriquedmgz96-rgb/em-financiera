@@ -48,6 +48,7 @@ router.post('/', async (req, res, next) => {
     let saldo = parseFloat(prestamo.monto_capital);
     const cuotaBase = parseFloat(prestamo.valor_cuota_base);
     const tasaMensual = parseFloat(prestamo.tasa_interes_mensual);
+    const tipoAmortizacion = prestamo.tipo_amortizacion || 'aleman';
     let pagoFinal = null;
 
     for (const pg of todosPagos) {
@@ -57,6 +58,7 @@ router.post('/', async (req, res, next) => {
         saldoCapitalActual: saldo,
         tasaMensual,
         cuotaBase,
+        tipoAmortizacion,
       });
       await client.query(
         `UPDATE pagos SET capital_amortizado=$1, interes_pagado=$2,
@@ -109,8 +111,9 @@ router.delete('/:id', async (req, res, next) => {
     let saldo = parseFloat(prestamo.monto_capital);
     const cuotaBase = parseFloat(prestamo.valor_cuota_base);
     const tasaMensual = parseFloat(prestamo.tasa_interes_mensual);
+    const tipoAmortizacion = prestamo.tipo_amortizacion || 'aleman';
     for (const pg of restantes) {
-      const r = calcularPago({ tipoPago: pg.tipo_pago, montoPagado: parseFloat(pg.monto_pagado), saldoCapitalActual: saldo, tasaMensual, cuotaBase });
+      const r = calcularPago({ tipoPago: pg.tipo_pago, montoPagado: parseFloat(pg.monto_pagado), saldoCapitalActual: saldo, tasaMensual, cuotaBase, tipoAmortizacion });
       await client.query(
         'UPDATE pagos SET capital_amortizado=$1, interes_pagado=$2, saldo_capital_post_pago=$3, cuotas_restantes_post_pago=$4 WHERE id=$5',
         [r.capitalAmortizado, r.interesPagado, r.saldoCapitalPostPago, r.cuotasRestantesPostPago, pg.id]
