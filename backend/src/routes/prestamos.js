@@ -109,7 +109,7 @@ router.get('/:id/contrato', async (req, res, next) => {
     });
     const nombreArchivo = `contrato-prestamo-${prestamo.id}-${prestamo.apellido.toLowerCase()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${nombreArchivo}"`);
     const doc = generarContrato(prestamo, tabla);
     doc.pipe(res);
   } catch (err) { next(err); }
@@ -136,7 +136,7 @@ router.get('/:id/resumen', async (req, res, next) => {
     const interesProxMes = parseFloat((baseIntResumen * tasa).toFixed(2));
     const nombreArchivo = `resumen-prestamo-${prestamo.id}-${prestamo.apellido.toLowerCase()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${nombreArchivo}"`);
     const doc = generarResumen(prestamo, pagos, saldo, interesProxMes);
     doc.pipe(res);
   } catch (err) { next(err); }

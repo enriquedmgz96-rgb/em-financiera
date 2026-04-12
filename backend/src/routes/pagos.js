@@ -145,7 +145,7 @@ router.get('/:id/recibo', async (req, res, next) => {
     );
     const nombreArchivo = `recibo-pago-${pago.id}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${nombreArchivo}"`);
     const doc = generarRecibo(pago, prestamos[0]);
     doc.pipe(res);
   } catch (err) { next(err); }
