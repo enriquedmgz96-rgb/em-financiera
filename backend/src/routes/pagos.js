@@ -71,6 +71,15 @@ router.post('/', async (req, res, next) => {
       if (pg.id === pagoInsertado.id) pagoFinal = { ...pg, ...resultado };
     }
 
+    // Si queda menos de $1 de saldo (redondeo de decimales), cerrar en $0
+    if (saldo > 0 && saldo < 1) {
+      saldo = 0;
+      const ultimoPago = todosPagos[todosPagos.length - 1];
+      await client.query(
+        'UPDATE pagos SET saldo_capital_post_pago = 0 WHERE id = $1', [ultimoPago.id]
+      );
+      if (pagoFinal) pagoFinal.saldoCapitalPostPago = 0;
+    }
     const nuevoEstado = saldo === 0 ? 'cancelado' : 'activo';
     await client.query('UPDATE prestamos SET estado = $1 WHERE id = $2', [nuevoEstado, id_prestamo]);
     await client.query('COMMIT');
@@ -120,6 +129,16 @@ router.delete('/:id', async (req, res, next) => {
         [r.capitalAmortizado, r.interesPagado, r.saldoCapitalPostPago, r.cuotasRestantesPostPago, pg.id]
       );
       saldo = r.saldoCapitalPostPago;
+    }
+    // Si queda menos de $1 de saldo (redondeo de decimales), cerrar en $0
+    if (saldo > 0 && saldo < 1) {
+      saldo = 0;
+      if (restantes.length > 0) {
+        const ultimoPago = restantes[restantes.length - 1];
+        await client.query(
+          'UPDATE pagos SET saldo_capital_post_pago = 0 WHERE id = $1', [ultimoPago.id]
+        );
+      }
     }
     const nuevoEstado = saldo === 0 ? 'cancelado' : 'activo';
     await client.query('UPDATE prestamos SET estado = $1 WHERE id = $2', [nuevoEstado, idPrestamo]);
