@@ -24,12 +24,12 @@ async function renderSimulador() {
         </div>
       </div>
       <div class="form-group" style="margin-bottom:0">
-        <label>Categoría de riesgo</label>
+        <label>Tasa de interés mensual</label>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem" id="btnsCategorias">
           ${categorias.map((c, i) => `
             <button onclick="seleccionarCategoria(${c.tasa_mensual}, this)"
               style="border:2px solid ${colorBadge(c.color)};background:${i===0?colorBadge(c.color):'white'};color:${i===0?'white':colorBadge(c.color)};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;transition:.2s">
-              ${c.nombre} — ${parseFloat(c.tasa_mensual)}%
+              ${parseFloat(c.tasa_mensual)}% mensual
             </button>`).join('')}
         </div>
       </div>
