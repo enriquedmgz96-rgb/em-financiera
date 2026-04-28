@@ -127,7 +127,13 @@ async function renderPrestamoDetalle(id) {
 
 async function renderPrestamoForm() {
   const app = document.getElementById('app');
-  const clientes = await api.get('/clientes').catch(() => []);
+  const [clientes, categorias] = await Promise.all([
+    api.get('/clientes').catch(() => []),
+    api.get('/categorias').catch(() => [])
+  ]);
+
+  const colorBadge = c => ({ verde: '#1b4332', amarillo: '#9a7b3f', rojo: '#c0392b', azul: '#2980b9' }[c] || '#2980b9');
+  const CUOTAS_OPTS = [1,2,3,4,5,6,7,8,9,10,11,12,18];
 
   app.innerHTML = `
     <div class="seccion-titulo">
@@ -149,7 +155,7 @@ async function renderPrestamoForm() {
           <option value="frances">Cuota fija francesa — interés sobre saldo (PMT)</option>
           <option value="aleman">Cuota decreciente — interés sobre saldo</option>
         </select>
-        <small id="infoAmortizacion" style="color:#555;margin-top:.3rem;display:block">
+        <small style="color:#555;margin-top:.3rem;display:block">
           Clásica: siempre la misma cuota, interés calculado sobre el capital original · Francesa: cuota fija pero menor, interés sobre saldo · Decreciente: primer mes más caro, luego baja
         </small>
       </div>
@@ -163,14 +169,36 @@ async function renderPrestamoForm() {
           </select>
         </div>
       </div>
+
       <div class="form-group">
-        <label>Cuotas y tasa *</label>
+        <label>Tasa de interés *</label>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.4rem" id="btnsCategorias">
+          ${categorias.map((c, i) => `
+            <button type="button" onclick="_selCat(${parseFloat(c.tasa_mensual)}, this)"
+              style="border:2px solid ${colorBadge(c.color)};background:${i===0 ? colorBadge(c.color) : 'white'};color:${i===0 ? 'white' : colorBadge(c.color)};padding:.35rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;font-size:.9rem;transition:.15s">
+              ${parseFloat(c.tasa_mensual)}% mensual
+            </button>`).join('')}
+          <span style="font-size:.8rem;color:#888;align-self:center" id="labelTasaPersonalizada"></span>
+        </div>
+        <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center">
+          <small style="color:#888">O ingresar tasa manual:</small>
+          <input type="number" id="tasaManual" step="0.01" min="0" placeholder="ej: 8.5"
+            style="width:90px;padding:.3rem .5rem;font-size:.85rem;border:1px solid #ddd;border-radius:6px" />
+          <small style="color:#888">% mensual</small>
+        </div>
+      </div>
+      <input type="hidden" name="tasa_interes_mensual" id="tasaHidden"
+        value="${categorias.length > 0 ? parseFloat(categorias[0].tasa_mensual) : ''}" />
+
+      <div class="form-group">
+        <label>Cantidad de cuotas *</label>
         <select name="total_cuotas" id="selectorCuotas" required>
           <option value="">Seleccionar...</option>
+          ${CUOTAS_OPTS.map(n => `<option value="${n}">${n} cuota${n>1?'s':''}</option>`).join('')}
         </select>
         <small id="infoTasa" style="color:#555;margin-top:.3rem;display:block"></small>
       </div>
-      <input type="hidden" name="tasa_interes_mensual" id="tasaHidden" />
+
       <div class="form-group">
         <label>Primer vencimiento *</label>
         <input name="primer_vencimiento" type="date" required />
@@ -203,34 +231,53 @@ async function renderPrestamoForm() {
     </form>
   `;
 
-  async function cargarTasas(moneda) {
-    try {
-      const tasas = await api.get(`/tasas?moneda=${moneda}`);
-      const sel = document.getElementById('selectorCuotas');
-      sel.innerHTML = '<option value="">Seleccionar...</option>' +
-        tasas.map(t => `<option value="${t.total_cuotas}" data-tasa="${t.tasa_mensual}" data-total="${t.tasa_total_pct}">
-          ${t.total_cuotas} cuota${t.total_cuotas > 1 ? 's' : ''} — Interés total: ${t.tasa_total_pct}%
-        </option>`).join('');
-      document.getElementById('tasaHidden').value = '';
-      document.getElementById('infoTasa').textContent = '';
-    } catch (_) {}
-  }
+  // Selección de categoría
+  window._selCat = (tasa, btn) => {
+    document.querySelectorAll('#btnsCategorias button').forEach(b => {
+      b.style.background = 'white';
+      b.style.color = b.style.borderColor;
+    });
+    btn.style.background = btn.style.borderColor;
+    btn.style.color = 'white';
+    document.getElementById('tasaHidden').value = tasa;
+    document.getElementById('tasaManual').value = '';
+    document.getElementById('labelTasaPersonalizada').textContent = '';
+    actualizarInfoTasa();
+    actualizarProyeccion();
+  };
 
-  await cargarTasas('ARS');
-
-  document.getElementById('monedaSelect').addEventListener('change', async e => {
-    await cargarTasas(e.target.value);
+  // Tasa manual
+  document.getElementById('tasaManual').addEventListener('input', e => {
+    const val = parseFloat(e.target.value);
+    if (!val || val <= 0) return;
+    // Deselect all category buttons
+    document.querySelectorAll('#btnsCategorias button').forEach(b => {
+      b.style.background = 'white';
+      b.style.color = b.style.borderColor;
+    });
+    document.getElementById('tasaHidden').value = val;
+    document.getElementById('labelTasaPersonalizada').textContent = `→ ${val}% aplicado`;
+    actualizarInfoTasa();
+    actualizarProyeccion();
   });
 
   document.getElementById('tipoAmortizacion').addEventListener('change', actualizarProyeccion);
 
-  document.getElementById('selectorCuotas').addEventListener('change', e => {
-    const opt = e.target.selectedOptions[0];
-    if (!opt.dataset.tasa) return;
-    document.getElementById('tasaHidden').value = opt.dataset.tasa;
-    document.getElementById('infoTasa').textContent = `Tasa mensual: ${opt.dataset.tasa}%  |  Tasa total: ${opt.dataset.total}%`;
+  document.getElementById('selectorCuotas').addEventListener('change', () => {
+    actualizarInfoTasa();
     actualizarProyeccion();
   });
+
+  function actualizarInfoTasa() {
+    const tasa = parseFloat(document.getElementById('tasaHidden').value);
+    const cuotas = parseInt(document.getElementById('selectorCuotas').value);
+    const info = document.getElementById('infoTasa');
+    if (tasa && cuotas) {
+      info.textContent = `Tasa mensual: ${tasa}%  |  Tasa total: ${parseFloat((tasa * cuotas).toFixed(2))}%`;
+    } else {
+      info.textContent = '';
+    }
+  }
 
   document.getElementById('montoCapital').addEventListener('input', actualizarProyeccion);
 
