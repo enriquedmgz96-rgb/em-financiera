@@ -25,12 +25,13 @@ async function renderPrestamos(verArchivados = false) {
     ${verArchivados ? '<p style="color:#888;font-size:.85rem;margin-bottom:1rem">Mostrando préstamos archivados (ocultos de la lista principal)</p>' : ''}
     <table>
       <thead>
-        <tr><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th></th></tr>
+        <tr><th>Legajo</th><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th></th></tr>
       </thead>
       <tbody>
-        ${prestamos.length === 0 ? `<tr><td colspan="7" style="text-align:center;color:#999">${verArchivados ? 'No hay préstamos archivados' : 'Sin préstamos registrados'}</td></tr>` :
+        ${prestamos.length === 0 ? `<tr><td colspan="8" style="text-align:center;color:#999">${verArchivados ? 'No hay préstamos archivados' : 'Sin préstamos registrados'}</td></tr>` :
           prestamos.map(p => `
             <tr>
+              <td><span style="font-family:var(--font-mono);font-size:.82rem;color:#888">P-${String(p.id).padStart(4,'0')}</span></td>
               <td>${p.apellido}, ${p.nombre}</td>
               <td>$${fmt(p.monto_capital)} ${p.moneda}</td>
               <td>${parseFloat(p.tasa_interes_mensual)}% m.</td>
@@ -54,7 +55,11 @@ async function renderPrestamoDetalle(id) {
 
   app.innerHTML = `
     <div class="seccion-titulo">
-      <h2>Préstamo #${p.id} — ${p.apellido}, ${p.nombre}
+      <h2>
+        <span style="font-family:var(--font-mono);font-size:.82rem;font-weight:400;color:#888;display:block;margin-bottom:.2rem">
+          Legajo P-${String(p.id).padStart(4,'0')} · Cliente C-${String(p.id_cliente).padStart(4,'0')}
+        </span>
+        ${p.apellido}, ${p.nombre}
         <span style="font-size:.75rem;font-weight:600;padding:.2rem .7rem;border-radius:12px;margin-left:.75rem;vertical-align:middle;${
           p.tipo_amortizacion === 'flat' ? 'background:#d5f5e3;color:#27ae60' :
           p.tipo_amortizacion === 'frances' ? 'background:#d6eaf8;color:#2980b9' :
@@ -125,7 +130,7 @@ async function renderPrestamoDetalle(id) {
   `;
 }
 
-async function renderPrestamoForm() {
+async function renderPrestamoForm(idClientePreseleccionado = null) {
   const app = document.getElementById('app');
   const [clientes, categorias] = await Promise.all([
     api.get('/clientes').catch(() => []),
@@ -145,7 +150,7 @@ async function renderPrestamoForm() {
         <label>Cliente *</label>
         <select name="id_cliente" required>
           <option value="">Seleccionar...</option>
-          ${clientes.map(c => `<option value="${c.id}">${c.apellido}, ${c.nombre} — DNI ${c.dni}</option>`).join('')}
+          ${clientes.map(c => `<option value="${c.id}" ${idClientePreseleccionado == c.id ? 'selected' : ''}>${c.apellido}, ${c.nombre} — DNI ${c.dni} (C-${String(c.id).padStart(4,'0')})</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
