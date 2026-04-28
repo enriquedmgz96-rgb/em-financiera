@@ -297,21 +297,67 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
         monto_capital: cap, tasa_interes_mensual: tasa, total_cuotas: cuotas, tipo_amortizacion: tipoAmort
       });
       const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+      const totalPagar = parseFloat(cap) + parseFloat(total_intereses);
       document.getElementById('proyeccion').innerHTML = `
-        <h4 style="margin-bottom:.5rem">Proyección de cuotas</h4>
+        <h4 style="margin-bottom:.75rem">Proyección de cuotas</h4>
+
+        <!-- Leyenda de columnas -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.5rem;margin-bottom:.9rem">
+          <div style="background:#f0f4f0;border-left:3px solid #1b4332;padding:.45rem .7rem;border-radius:4px;font-size:.78rem">
+            <strong style="display:block;color:#1b4332">N° Cuota</strong>
+            <span style="color:#555">Número de pago mensual</span>
+          </div>
+          <div style="background:#f0f4f0;border-left:3px solid #1b4332;padding:.45rem .7rem;border-radius:4px;font-size:.78rem">
+            <strong style="display:block;color:#1b4332">Capital</strong>
+            <span style="color:#555">Parte que reduce la deuda</span>
+          </div>
+          <div style="background:#fdf6ec;border-left:3px solid #9a7b3f;padding:.45rem .7rem;border-radius:4px;font-size:.78rem">
+            <strong style="display:block;color:#9a7b3f">Interés</strong>
+            <span style="color:#555">Costo del préstamo ese mes</span>
+          </div>
+          <div style="background:#f5f0ff;border-left:3px solid #6c5ce7;padding:.45rem .7rem;border-radius:4px;font-size:.78rem">
+            <strong style="display:block;color:#6c5ce7">Total cuota</strong>
+            <span style="color:#555">Lo que paga el cliente ese mes</span>
+          </div>
+          <div style="background:#f8f8f8;border-left:3px solid #888;padding:.45rem .7rem;border-radius:4px;font-size:.78rem">
+            <strong style="display:block;color:#444">Saldo restante</strong>
+            <span style="color:#555">Deuda de capital que queda</span>
+          </div>
+        </div>
+
         <table>
-          <thead><tr><th>Cuota</th><th>Capital</th><th>Interés</th><th>Total cuota</th><th>Saldo</th></tr></thead>
+          <thead>
+            <tr>
+              <th>N° Cuota</th>
+              <th>Capital</th>
+              <th>Interés</th>
+              <th>Total cuota</th>
+              <th>Saldo restante</th>
+            </tr>
+          </thead>
           <tbody>${tabla.map(r => `
             <tr>
-              <td>${r.cuota}</td>
-              <td>$${fmt(r.capitalAmortizado)}</td>
-              <td>$${fmt(r.interes)}</td>
-              <td>$${fmt(r.cuotaTotal)}</td>
-              <td>$${fmt(r.saldoRestante)}</td>
+              <td style="font-weight:600;color:#888">${r.cuota}</td>
+              <td style="color:#1b4332;font-weight:600">$${fmt(r.capitalAmortizado)}</td>
+              <td style="color:#9a7b3f">$${fmt(r.interes)}</td>
+              <td style="font-weight:700">$${fmt(r.cuotaTotal)}</td>
+              <td style="color:#666">$${fmt(r.saldoRestante)}</td>
             </tr>`).join('')}
           </tbody>
         </table>
-        <p style="margin-top:.5rem;font-size:.9rem">Total intereses: <strong>$${fmt(total_intereses)}</strong></p>
+
+        <!-- Resumen totales -->
+        <div style="display:flex;gap:.75rem;margin-top:.9rem;flex-wrap:wrap">
+          <div style="background:#f0f4f0;border:1px solid #c8dbd0;padding:.55rem 1rem;border-radius:6px;font-size:.88rem">
+            Capital prestado: <strong>$${fmt(cap)}</strong>
+          </div>
+          <div style="background:#fdf6ec;border:1px solid #e8d5b0;padding:.55rem 1rem;border-radius:6px;font-size:.88rem">
+            Total intereses: <strong style="color:#9a7b3f">$${fmt(total_intereses)}</strong>
+          </div>
+          <div style="background:#f5f0ff;border:1px solid #c9bff5;padding:.55rem 1rem;border-radius:6px;font-size:.88rem">
+            Total a devolver: <strong style="color:#6c5ce7">$${fmt(totalPagar)}</strong>
+          </div>
+        </div>
       `;
     } catch (_) {}
   }
