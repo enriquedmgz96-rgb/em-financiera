@@ -8,7 +8,13 @@ router.get('/', async (req, res, next) => {
   try {
     const conditions = [];
     const params = [];
-    if (req.query.estado) { conditions.push(`p.estado = $${params.length + 1}`); params.push(req.query.estado); }
+    if (req.query.estado) {
+      conditions.push(`p.estado = $${params.length + 1}`);
+      params.push(req.query.estado);
+    } else if (req.query.incluir_archivados !== 'true') {
+      // Por defecto excluir archivados de la lista principal
+      conditions.push(`p.estado != 'archivado'`);
+    }
     if (req.query.id_cliente) { conditions.push(`p.id_cliente = $${params.length + 1}`); params.push(req.query.id_cliente); }
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
     const { rows } = await pool.query(

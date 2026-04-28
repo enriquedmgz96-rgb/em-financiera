@@ -1,11 +1,13 @@
-async function renderPrestamos() {
+async function renderPrestamos(verArchivados = false) {
   const app = document.getElementById('app');
   app.innerHTML = '<p>Cargando...</p>';
-  const prestamos = await api.get('/prestamos').catch(() => []);
+  const url = verArchivados ? '/prestamos?estado=archivado' : '/prestamos';
+  const prestamos = await api.get(url).catch(() => []);
 
   const semaforo = p => {
-    if (p.estado === 'cancelado') return '<span class="badge badge-verde">Cancelado</span>';
-    if (p.estado === 'mora')      return '<span class="badge badge-rojo">Mora</span>';
+    if (p.estado === 'cancelado')  return '<span class="badge badge-verde">Cancelado</span>';
+    if (p.estado === 'mora')       return '<span class="badge badge-rojo">Mora</span>';
+    if (p.estado === 'archivado')  return '<span class="badge" style="background:#f0f0f0;color:#888">Archivado</span>';
     return '<span class="badge badge-verde">Activo</span>';
   };
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 });
@@ -13,14 +15,20 @@ async function renderPrestamos() {
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>Préstamos</h2>
-      <button class="btn-primary" onclick="renderPrestamoForm()">+ Nuevo préstamo</button>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <button class="btn-secondary" style="font-size:.85rem" onclick="renderPrestamos(${!verArchivados})">
+          ${verArchivados ? '← Ver activos' : 'Ver archivados'}
+        </button>
+        <button class="btn-primary" onclick="renderPrestamoForm()">+ Nuevo préstamo</button>
+      </div>
     </div>
+    ${verArchivados ? '<p style="color:#888;font-size:.85rem;margin-bottom:1rem">Mostrando préstamos archivados (ocultos de la lista principal)</p>' : ''}
     <table>
       <thead>
         <tr><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th></th></tr>
       </thead>
       <tbody>
-        ${prestamos.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:#999">Sin préstamos registrados</td></tr>' :
+        ${prestamos.length === 0 ? `<tr><td colspan="7" style="text-align:center;color:#999">${verArchivados ? 'No hay préstamos archivados' : 'Sin préstamos registrados'}</td></tr>` :
           prestamos.map(p => `
             <tr>
               <td>${p.apellido}, ${p.nombre}</td>
@@ -101,14 +109,18 @@ async function renderPrestamoDetalle(id) {
       </tbody>
     </table>`}
 
-    <div style="display:flex;gap:.75rem">
-      <button class="btn-primary" onclick="renderPagoForm(${p.id})">Registrar pago</button>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      ${p.estado !== 'archivado' ? `<button class="btn-primary" onclick="renderPagoForm(${p.id})">Registrar pago</button>` : ''}
       <a href="/api/prestamos/${p.id}/contrato" target="_blank">
         <button class="btn-secondary">Descargar contrato</button>
       </a>
       <a href="/api/prestamos/${p.id}/resumen" target="_blank">
         <button class="btn-secondary">Estado de cuenta</button>
       </a>
+      ${p.estado === 'archivado'
+        ? `<button class="btn-secondary" style="color:var(--verde-mid)" onclick="desarchivarPrestamo(${p.id})">Desarchivar</button>`
+        : `<button class="btn-secondary" style="color:#888;margin-left:auto" onclick="archivarPrestamo(${p.id})">Archivar</button>`
+      }
     </div>
   `;
 }
@@ -131,13 +143,6 @@ async function renderPrestamoForm() {
         </select>
       </div>
       <div class="form-group">
-        <label>Moneda</label>
-        <select name="moneda" id="monedaSelect">
-          <option value="ARS">ARS (Pesos)</option>
-          <option value="USD">USD (Dólares)</option>
-        </select>
-      </div>
-      <div class="form-group">
         <label>Sistema de amortización *</label>
         <select name="tipo_amortizacion" id="tipoAmortizacion">
           <option value="flat">Cuota fija clásica — interés sobre capital original (recomendado)</option>
@@ -150,7 +155,13 @@ async function renderPrestamoForm() {
       </div>
       <div class="form-group">
         <label>Monto capital *</label>
-        <input name="monto_capital" id="montoCapital" type="number" step="0.01" required />
+        <div style="display:flex;gap:.5rem">
+          <input name="monto_capital" id="montoCapital" type="number" step="0.01" required style="flex:1" />
+          <select name="moneda" id="monedaSelect" style="width:120px">
+            <option value="ARS">ARS $</option>
+            <option value="USD">USD $</option>
+          </select>
+        </div>
       </div>
       <div class="form-group">
         <label>Cuotas y tasa *</label>
@@ -274,5 +285,25 @@ async function eliminarPago(pagoId, prestamoId) {
     renderPrestamoDetalle(prestamoId);
   } catch (err) {
     alert('Error al eliminar: ' + err.message);
+  }
+}
+
+async function archivarPrestamo(id) {
+  if (!confirm('¿Archivar este préstamo? Va a quedar oculto de la lista principal pero podés verlo en "Ver archivados".')) return;
+  try {
+    await api.put(`/prestamos/${id}`, { estado: 'archivado' });
+    renderPrestamos();
+  } catch (err) {
+    alert('Error al archivar: ' + err.message);
+  }
+}
+
+async function desarchivarPrestamo(id) {
+  if (!confirm('¿Restaurar este préstamo a la lista principal?')) return;
+  try {
+    await api.put(`/prestamos/${id}`, { estado: 'activo' });
+    renderPrestamoDetalle(id);
+  } catch (err) {
+    alert('Error al desarchivar: ' + err.message);
   }
 }
