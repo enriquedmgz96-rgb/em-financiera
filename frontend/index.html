@@ -8,8 +8,142 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Figtree:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    /* ── Login overlay ── */
+    #loginOverlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 60%, #1a3a2a 100%);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    #loginOverlay.visible { display: flex; }
+    .login-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 2.5rem 2.5rem 2rem;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .login-brand {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.7rem;
+      color: #1b4332;
+      margin-bottom: .25rem;
+    }
+    .login-sub {
+      font-size: .85rem;
+      color: #888;
+      margin-bottom: 1.75rem;
+    }
+    .login-box label {
+      display: block;
+      font-size: .8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #555;
+      margin-bottom: .35rem;
+    }
+    .login-box input {
+      width: 100%;
+      padding: .65rem .85rem;
+      border: 1.5px solid #ddd;
+      border-radius: 7px;
+      font-size: .97rem;
+      margin-bottom: 1rem;
+      font-family: inherit;
+      transition: border-color .15s;
+    }
+    .login-box input:focus { outline: none; border-color: #1b4332; }
+    .login-btn {
+      width: 100%;
+      background: #1b4332;
+      color: white;
+      border: none;
+      border-radius: 7px;
+      padding: .75rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s;
+      margin-top: .25rem;
+    }
+    .login-btn:hover { background: #2d6a4f; }
+    #loginError {
+      color: #c0392b;
+      font-size: .85rem;
+      margin-top: .75rem;
+      min-height: 1.2em;
+      text-align: center;
+    }
+
+    /* ── Usuario en navbar ── */
+    .navbar-user {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      margin-left: auto;
+    }
+    .navbar-user .user-chip {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      background: rgba(255,255,255,.12);
+      border-radius: 20px;
+      padding: .25rem .7rem .25rem .45rem;
+      font-size: .82rem;
+      color: rgba(255,255,255,.9);
+    }
+    .navbar-user .user-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: .75rem;
+      color: white;
+      flex-shrink: 0;
+    }
+    .navbar-user .btn-logout {
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.2);
+      color: rgba(255,255,255,.8);
+      border-radius: 6px;
+      padding: .25rem .65rem;
+      font-size: .78rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s;
+    }
+    .navbar-user .btn-logout:hover { background: rgba(255,255,255,.2); color: white; }
+  </style>
 </head>
 <body>
+
+  <!-- Login overlay -->
+  <div id="loginOverlay" class="visible">
+    <div class="login-box">
+      <div class="login-brand">EM Financiera</div>
+      <div class="login-sub">Sistema de gestión de préstamos</div>
+      <form id="loginForm" autocomplete="on">
+        <label>Usuario</label>
+        <input type="text" id="loginUser" name="username" autocomplete="username" placeholder="kike / Meli" />
+        <label>Contraseña</label>
+        <input type="password" id="loginPass" name="password" autocomplete="current-password" placeholder="••••••••" />
+        <button type="submit" class="login-btn">Iniciar sesión</button>
+        <div id="loginError"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- App principal -->
   <nav class="navbar">
     <span class="brand">EM <span>Financiera</span></span>
     <div class="nav-links">
@@ -19,6 +153,7 @@
       <a href="#" data-page="pagos">Registrar Pago</a>
       <a href="#" data-page="simulador">Tasas & Simulador</a>
     </div>
+    <div class="navbar-user" id="navbarUser"></div>
   </nav>
 
   <main id="app"></main>
@@ -30,7 +165,64 @@
   <script src="/js/pagos.js"></script>
   <script src="/js/simulador.js"></script>
   <script>
-    const pages = { dashboard: renderDashboard, clientes: renderClientes, prestamos: renderPrestamos, pagos: renderPagos, simulador: renderSimulador };
+    // ── Auth ────────────────────────────────────────────────
+    function mostrarLogin() {
+      document.getElementById('loginOverlay').classList.add('visible');
+      document.getElementById('navbarUser').innerHTML = '';
+      document.getElementById('app').innerHTML = '';
+    }
+
+    function ocultarLogin(user) {
+      document.getElementById('loginOverlay').classList.remove('visible');
+      const inicial = (user.nombre || user.username || '?')[0].toUpperCase();
+      document.getElementById('navbarUser').innerHTML = `
+        <div class="user-chip">
+          <div class="user-avatar">${inicial}</div>
+          ${user.nombre || user.username}
+        </div>
+        <button class="btn-logout" onclick="logout()">Salir</button>
+      `;
+      navigate('dashboard');
+    }
+
+    function logout() {
+      localStorage.removeItem('em_token');
+      localStorage.removeItem('em_user');
+      mostrarLogin();
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const username = document.getElementById('loginUser').value.trim();
+      const password = document.getElementById('loginPass').value;
+      const errEl = document.getElementById('loginError');
+      errEl.textContent = '';
+      try {
+        const data = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        }).then(async r => {
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'Error al iniciar sesión');
+          return d;
+        });
+        localStorage.setItem('em_token', data.token);
+        localStorage.setItem('em_user', JSON.stringify({ username: data.username, nombre: data.nombre }));
+        ocultarLogin(data);
+      } catch (err) {
+        errEl.textContent = err.message;
+      }
+    });
+
+    // ── Navegación ────────────────────────────────────────────
+    const pages = {
+      dashboard: renderDashboard,
+      clientes:  renderClientes,
+      prestamos: renderPrestamos,
+      pagos:     renderPagos,
+      simulador: renderSimulador,
+    };
 
     function navigate(page) {
       document.querySelectorAll('.nav-links a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
@@ -41,7 +233,19 @@
       a.addEventListener('click', e => { e.preventDefault(); navigate(a.dataset.page); });
     });
 
-    navigate('dashboard');
+    // ── Inicializar ───────────────────────────────────────────
+    const savedToken = localStorage.getItem('em_token');
+    const savedUser  = localStorage.getItem('em_user');
+
+    if (savedToken && savedUser) {
+      // Verificar que el token aún es válido
+      fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${savedToken}` } })
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(user => ocultarLogin(user))
+        .catch(() => mostrarLogin());
+    } else {
+      mostrarLogin();
+    }
   </script>
 </body>
 </html>

@@ -36,9 +36,11 @@ router.post('/', async (req, res, next) => {
     // Insertar el nuevo pago con valores provisorios (se recalculan abajo)
     const { rows: [pagoInsertado] } = await client.query(
       `INSERT INTO pagos (id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago,
-        capital_amortizado, interes_pagado, saldo_capital_post_pago, cuotas_restantes_post_pago, observaciones)
-       VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6) RETURNING *`,
-      [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago || 'efectivo', observaciones || null]
+        capital_amortizado, interes_pagado, saldo_capital_post_pago, cuotas_restantes_post_pago,
+        observaciones, creado_por_id, creado_por_nombre)
+       VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7,$8) RETURNING *`,
+      [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago || 'efectivo',
+       observaciones || null, req.user?.id || null, req.user?.nombre || req.user?.username || null]
     );
 
     // Replay: recalcular TODOS los pagos del préstamo en orden cronológico
