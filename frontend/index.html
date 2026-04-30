@@ -146,15 +146,28 @@
   <!-- App principal -->
   <nav class="navbar">
     <span class="brand">EM <span>Financiera</span></span>
-    <div class="nav-links">
+    <div class="nav-links" id="navLinks">
       <a href="#" data-page="dashboard" class="active">Dashboard</a>
       <a href="#" data-page="clientes">Clientes</a>
       <a href="#" data-page="prestamos">Préstamos</a>
-      <a href="#" data-page="pagos">Registrar Pago</a>
-      <a href="#" data-page="simulador">Tasas & Simulador</a>
+      <a href="#" data-page="pagos">Pago</a>
+      <a href="#" data-page="simulador">Simulador</a>
     </div>
     <div class="navbar-user" id="navbarUser"></div>
+    <button class="nav-hamburger" id="navHamburger" aria-label="Menú">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
+  <!-- Mobile menu drawer -->
+  <div class="nav-drawer" id="navDrawer">
+    <a href="#" data-page="dashboard">Dashboard</a>
+    <a href="#" data-page="clientes">Clientes</a>
+    <a href="#" data-page="prestamos">Préstamos</a>
+    <a href="#" data-page="pagos">Registrar Pago</a>
+    <a href="#" data-page="simulador">Tasas & Simulador</a>
+    <div id="drawerUser" style="padding:0.75rem 1.5rem 0;border-top:1px solid var(--border);margin-top:0.5rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem"></div>
+  </div>
+  <div class="nav-overlay" id="navOverlay"></div>
 
   <main id="app"></main>
 
@@ -175,12 +188,18 @@
     function ocultarLogin(user) {
       document.getElementById('loginOverlay').classList.remove('visible');
       const inicial = (user.nombre || user.username || '?')[0].toUpperCase();
-      document.getElementById('navbarUser').innerHTML = `
+      const chipHTML = `
         <div class="user-chip">
           <div class="user-avatar">${inicial}</div>
           ${user.nombre || user.username}
         </div>
         <button class="btn-logout" onclick="logout()">Salir</button>
+      `;
+      document.getElementById('navbarUser').innerHTML = chipHTML;
+      // Drawer user section (mobile)
+      document.getElementById('drawerUser').innerHTML = `
+        <span style="font-size:.85rem;color:var(--ink-2);font-weight:600">${user.nombre || user.username}</span>
+        <button class="btn-logout" onclick="logout()" style="font-size:.78rem;padding:.3rem .7rem">Salir</button>
       `;
       navigate('dashboard');
     }
@@ -225,11 +244,37 @@
     };
 
     function navigate(page) {
-      document.querySelectorAll('.nav-links a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+      document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+      closeDrawer();
       pages[page]();
     }
 
     document.querySelectorAll('.nav-links a').forEach(a => {
+      a.addEventListener('click', e => { e.preventDefault(); navigate(a.dataset.page); });
+    });
+
+    // ── Hamburger / Drawer ────────────────────────────────────
+    const hamburger = document.getElementById('navHamburger');
+    const drawer    = document.getElementById('navDrawer');
+    const overlay   = document.getElementById('navOverlay');
+
+    function openDrawer() {
+      drawer.classList.add('open');
+      overlay.classList.add('open');
+      hamburger.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      overlay.classList.remove('open');
+      hamburger.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    hamburger.addEventListener('click', () => drawer.classList.contains('open') ? closeDrawer() : openDrawer());
+    overlay.addEventListener('click', closeDrawer);
+
+    document.querySelectorAll('.nav-drawer a').forEach(a => {
       a.addEventListener('click', e => { e.preventDefault(); navigate(a.dataset.page); });
     });
 
