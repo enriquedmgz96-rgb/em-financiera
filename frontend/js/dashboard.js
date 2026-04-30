@@ -96,6 +96,7 @@ async function renderDashboard() {
         </div>` : ''}
     `;
   } catch (err) {
+    if (err._auth) return;
     app.innerHTML = `<h2>Panel de control</h2><p class="msg-error">Error: ${err.message}</p>`;
   }
 }

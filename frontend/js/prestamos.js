@@ -373,6 +373,7 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
       await api.post('/prestamos', fd);
       renderPrestamos();
     } catch (err) {
+      if (err._auth) return;
       msg.innerHTML = `<span class="msg-error">${err.message}</span>`;
     }
   });
@@ -384,6 +385,7 @@ async function eliminarPago(pagoId, prestamoId) {
     await api.delete(`/pagos/${pagoId}`);
     renderPrestamoDetalle(prestamoId);
   } catch (err) {
+    if (err._auth) return;
     alert('Error al eliminar: ' + err.message);
   }
 }
@@ -394,6 +396,7 @@ async function archivarPrestamo(id) {
     await api.put(`/prestamos/${id}`, { estado: 'archivado' });
     renderPrestamos();
   } catch (err) {
+    if (err._auth) return;
     alert('Error al archivar: ' + err.message);
   }
 }
@@ -404,6 +407,7 @@ async function desarchivarPrestamo(id) {
     await api.put(`/prestamos/${id}`, { estado: 'activo' });
     renderPrestamoDetalle(id);
   } catch (err) {
+    if (err._auth) return;
     alert('Error al desarchivar: ' + err.message);
   }
 }
