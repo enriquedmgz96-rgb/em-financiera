@@ -25,7 +25,7 @@ async function renderPrestamos(verArchivados = false) {
     ${verArchivados ? '<p style="color:#888;font-size:.85rem;margin-bottom:1rem">Mostrando préstamos archivados (ocultos de la lista principal)</p>' : ''}
     <table>
       <thead>
-        <tr><th>Legajo</th><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th></th></tr>
+        <tr><th>Legajo</th><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th>Creado por</th><th></th></tr>
       </thead>
       <tbody>
         ${prestamos.length === 0 ? `<tr><td colspan="8" style="text-align:center;color:#999">${verArchivados ? 'No hay préstamos archivados' : 'Sin préstamos registrados'}</td></tr>` :
@@ -38,6 +38,7 @@ async function renderPrestamos(verArchivados = false) {
               <td>${p.total_cuotas}</td>
               <td>${String(p.primer_vencimiento).split('T')[0]}</td>
               <td>${semaforo(p)}</td>
+              <td style="font-size:.82rem;color:#888">${p.creado_por_nombre || '-'}</td>
               <td><button class="btn-secondary" style="margin:0" onclick="renderPrestamoDetalle(${p.id})">Ver</button></td>
             </tr>`).join('')}
       </tbody>
@@ -94,7 +95,7 @@ async function renderPrestamoDetalle(id) {
     <h3>Historial de pagos</h3>
     ${p.pagos.length === 0 ? '<p style="margin-bottom:1rem;color:#999">Sin pagos registrados.</p>' : `
     <table style="margin-bottom:1.5rem">
-      <thead><tr><th>Fecha pago</th><th>Registrado</th><th>Tipo</th><th>Forma</th><th>Monto pagado</th><th>Capital amort.</th><th>Interés</th><th>Saldo post-pago</th><th></th></tr></thead>
+      <thead><tr><th>Fecha pago</th><th>Registrado</th><th>Tipo</th><th>Forma</th><th>Monto pagado</th><th>Capital amort.</th><th>Interés</th><th>Saldo post-pago</th><th>Por</th><th></th></tr></thead>
       <tbody>
         ${p.pagos.map(pg => `
           <tr>
@@ -106,6 +107,7 @@ async function renderPrestamoDetalle(id) {
             <td>$${fmt(pg.capital_amortizado)}</td>
             <td>$${fmt(pg.interes_pagado)}</td>
             <td>$${fmt(pg.saldo_capital_post_pago)}</td>
+            <td style="font-size:.8rem;color:#888">${pg.creado_por_nombre || '-'}</td>
             <td style="display:flex;gap:.3rem">
               <a href="/api/pagos/${pg.id}/recibo" target="_blank"><button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem">PDF</button></a>
               <button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem;color:var(--rojo)" onclick="eliminarPago(${pg.id}, ${p.id})">✕</button>

@@ -45,12 +45,13 @@ router.post('/', async (req, res, next) => {
       `INSERT INTO prestamos
          (id_cliente, moneda, monto_capital, tasa_interes_mensual, total_cuotas,
           valor_cuota_base, primer_vencimiento, estado, pagare_firmado, motivo,
-          nombre_garantia, telefono_garantia, dni_garantia, observaciones, tipo_amortizacion)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'activo',$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+          nombre_garantia, telefono_garantia, dni_garantia, observaciones, tipo_amortizacion,
+          creado_por_id, creado_por_nombre)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'activo',$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [id_cliente, moneda || 'ARS', monto_capital, tasa_interes_mensual, total_cuotas,
         valor_cuota_base, primer_vencimiento, pagare_firmado || false, motivo || null,
         nombre_garantia || null, telefono_garantia || null, dni_garantia || null, observaciones || null,
-        tipoAmort]
+        tipoAmort, req.user?.id || null, req.user?.nombre || req.user?.username || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
