@@ -241,6 +241,7 @@ async function renderPagoForm(prestamoId) {
       msg.innerHTML = '<span class="msg-ok">✓ Pago registrado correctamente. Redirigiendo...</span>';
       setTimeout(() => renderPrestamoDetalle(prestamoId), 1500);
     } catch (err) {
+      if (err._auth) return;
       msg.innerHTML = `<span class="msg-error">${err.message}</span>`;
     }
   });

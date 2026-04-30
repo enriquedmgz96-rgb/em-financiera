@@ -15,7 +15,9 @@ async function apiFetch(path, options = {}) {
     localStorage.removeItem('em_token');
     localStorage.removeItem('em_user');
     mostrarLogin();
-    throw new Error('Sesión expirada — iniciá sesión nuevamente');
+    const authErr = new Error('Sesión expirada — iniciá sesión nuevamente');
+    authErr._auth = true;
+    throw authErr;
   }
 
   const data = await res.json();

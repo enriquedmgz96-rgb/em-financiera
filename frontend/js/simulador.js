@@ -145,15 +145,15 @@ function simular(monto, tasaMensual, sistema = 'flat') {
   contenedor.innerHTML = `
     <table>
       <thead>
-        <tr><th>Cuotas</th><th>Tasa total</th><th>Total a pagar</th><th>${colHeader[sistema] || 'Cuota'}</th></tr>
+        <tr><th>Cuotas</th><th>Tasa mensual</th><th>${colHeader[sistema] || 'Cuota'}</th><th>Total a pagar</th></tr>
       </thead>
       <tbody>
         ${filas.map(f => `
           <tr>
             <td><strong>${f.n}x</strong></td>
-            <td>${parseFloat((tasaMensual * f.n).toFixed(2))}%</td>
-            <td>$ ${fmt(f.totalFinanciado)}</td>
+            <td>${parseFloat(tasaMensual)}%</td>
             <td>$ ${fmt(f.precioCuota)}</td>
+            <td>$ ${fmt(f.totalFinanciado)}</td>
           </tr>`).join('')}
       </tbody>
     </table>
@@ -172,7 +172,7 @@ async function nuevaCategoria() {
   try {
     await api.post('/categorias', { nombre, tasa_mensual: parseFloat(tasa), color: color || 'azul' });
     renderSimulador();
-  } catch (err) { alert('Error: ' + err.message); }
+  } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
 async function editarCategoria(id, nombreActual, tasaActual, colorActual) {
@@ -184,7 +184,7 @@ async function editarCategoria(id, nombreActual, tasaActual, colorActual) {
   try {
     await api.put(`/categorias/${id}`, { nombre, tasa_mensual: parseFloat(tasa) });
     renderSimulador();
-  } catch (err) { alert('Error: ' + err.message); }
+  } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
 async function eliminarCategoria(id) {
@@ -192,7 +192,7 @@ async function eliminarCategoria(id) {
   try {
     await api.delete(`/categorias/${id}`);
     renderSimulador();
-  } catch (err) { alert('Error: ' + err.message); }
+  } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
 function generarPresupuesto(monto, tasaMensual, sistema = 'flat') {
@@ -220,6 +220,7 @@ function generarPresupuesto(monto, tasaMensual, sistema = 'flat') {
     return { n, tasaTotal: tasaMensual * n, totalFinanciado, precioCuota };
   });
 
+  const colCuota = sistema === 'aleman' ? '1ª cuota' : 'Cuota mensual';
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -227,49 +228,53 @@ function generarPresupuesto(monto, tasaMensual, sistema = 'flat') {
   <title>Presupuesto — ${nombre}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; color: #2c3e50; padding: 2rem; max-width: 700px; margin: 0 auto; }
-    .header { border-bottom: 3px solid #2980b9; padding-bottom: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: flex-end; }
-    .brand { font-size: 1.6rem; font-weight: 700; color: #2980b9; }
-    .meta { text-align: right; font-size: .9rem; color: #555; }
-    .monto-box { background: #f0f9f4; border: 2px solid #27ae60; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; }
-    .monto-box .label { font-size: .9rem; color: #555; }
-    .monto-box .valor { font-size: 1.8rem; font-weight: 700; color: #27ae60; }
+    body { font-family: Arial, sans-serif; color: #2c3e50; padding: 2rem; max-width: 640px; margin: 0 auto; }
+    .header { border-bottom: 3px solid #1b4332; padding-bottom: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: flex-end; }
+    .brand { font-size: 1.6rem; font-weight: 700; color: #1b4332; }
+    .meta { text-align: right; font-size: .88rem; color: #666; line-height: 1.6; }
+    .monto-box { background: #f0faf2; border: 2px solid #1b4332; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; }
+    .monto-label { font-size: .82rem; color: #666; text-transform: uppercase; letter-spacing: .05em; }
+    .monto-valor { font-size: 2rem; font-weight: 700; color: #1b4332; margin-top: .2rem; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
-    th { background: #2c3e50; color: white; padding: .6rem 1rem; text-align: left; font-size: .9rem; }
-    td { padding: .6rem 1rem; border-bottom: 1px solid #ecf0f1; font-size: .95rem; }
-    tr:nth-child(even) td { background: #f8f9fa; }
-    .footer { font-size: .8rem; color: #999; border-top: 1px solid #ecf0f1; padding-top: 1rem; }
-    @media print { body { padding: 1rem; } }
+    th { background: #1b4332; color: white; padding: .65rem 1rem; text-align: left; font-size: .85rem; font-weight: 600; }
+    td { padding: .65rem 1rem; border-bottom: 1px solid #e8f5e9; font-size: .95rem; }
+    tr:nth-child(even) td { background: #f8fdf9; }
+    td:first-child { font-weight: 700; }
+    .footer { font-size: .78rem; color: #aaa; border-top: 1px solid #e0e0e0; padding-top: .85rem; margin-top: .5rem; }
+    @media print {
+      body { padding: .8rem; }
+      button { display: none; }
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="brand">EM Financiera</div>
     <div class="meta">
-      <div>Presupuesto para: <strong>${nombre}</strong></div>
-      <div>Fecha: ${fecha}</div>
+      Presupuesto para: <strong>${nombre}</strong><br>
+      Fecha: ${fecha}
     </div>
   </div>
   <div class="monto-box">
-    <div><div class="label">Monto solicitado</div><div class="valor">$ ${fmt(monto)}</div></div>
-    <div style="text-align:right"><div class="label">Sistema</div><div style="font-weight:600;font-size:.95rem">${sistemaLabel}</div></div>
+    <div class="monto-label">Monto solicitado</div>
+    <div class="monto-valor">$ ${fmt(monto)}</div>
   </div>
   <table>
     <thead>
-      <tr><th>Cuotas</th><th>Tasa total</th><th>Total a pagar</th><th>${sistema === 'aleman' ? '1ª cuota' : 'Cuota mensual'}</th></tr>
+      <tr><th>Cuotas</th><th>Tasa mensual</th><th>${colCuota}</th><th>Total a pagar</th></tr>
     </thead>
     <tbody>
       ${filas.map(f => `
         <tr>
-          <td><strong>${f.n} cuota${f.n > 1 ? 's' : ''}</strong></td>
-          <td>${parseFloat(f.tasaTotal.toFixed(2))}%</td>
-          <td>$ ${fmt(f.totalFinanciado)}</td>
+          <td>${f.n} cuota${f.n > 1 ? 's' : ''}</td>
+          <td>${tasaMensual}%</td>
           <td>$ ${fmt(f.precioCuota)}</td>
+          <td>$ ${fmt(f.totalFinanciado)}</td>
         </tr>`).join('')}
     </tbody>
   </table>
   <div class="footer">
-    Presupuesto válido por 7 días. Tasa mensual aplicada: ${tasaMensual}%. Valores en pesos argentinos (ARS).
+    Presupuesto válido por 7 días &nbsp;·&nbsp; Tasa mensual: ${tasaMensual}% &nbsp;·&nbsp; Valores en pesos argentinos (ARS).
   </div>
   <script>window.print();<\/script>
 </body>

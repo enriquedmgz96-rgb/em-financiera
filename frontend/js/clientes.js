@@ -242,6 +242,7 @@ async function renderClienteForm(id = null) {
       else await api.post('/clientes', fd);
       id ? renderClienteDetalle(id) : renderClientes();
     } catch (err) {
+      if (err._auth) return;
       msg.innerHTML = `<span class="msg-error">${err.message}</span>`;
     }
   });

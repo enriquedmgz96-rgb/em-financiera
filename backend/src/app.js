@@ -11,6 +11,7 @@ const calculadoraRouter = require('./routes/calculadora');
 const tasasRouter       = require('./routes/tasas');
 const mantenimientoRouter = require('./routes/mantenimiento');
 const categoriasRouter  = require('./routes/categorias');
+const usuariosRouter    = require('./routes/usuarios');
 const authMiddleware    = require('./middleware/authMiddleware');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api/calcular',      calculadoraRouter);
 app.use('/api/tasas',         tasasRouter);
 app.use('/api/mantenimiento', mantenimientoRouter);
 app.use('/api/categorias',    categoriasRouter);
+app.use('/api/usuarios',      usuariosRouter);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
