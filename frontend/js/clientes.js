@@ -7,12 +7,26 @@ const DOCS_REQUERIDOS = [
   { id: 'extracto_bancario',      label: 'Extracto bancario (últimos 3 meses)',                          grupo: 'Ingresos' },
   { id: 'dni_garante',            label: 'Fotocopia DNI del garante (frente y dorso)',                   grupo: 'Garantía' },
   { id: 'ingresos_garante',       label: 'Comprobante de ingresos del garante',                          grupo: 'Garantía' },
-  { id: 'contrato_firmado',       label: 'Contrato de préstamo firmado',                                 grupo: 'Contrato' },
-  { id: 'pagare_firmado',         label: 'Pagaré firmado',                                               grupo: 'Contrato' },
+];
+
+const ORIGENES = [
+  'Referido',
+  'EMM',
+  'Redes sociales',
+  'Instagram',
+  'Facebook',
+  'WhatsApp',
+  'Cliente recurrente',
+  'Publicidad / Volante',
+  'Cartel del local',
 ];
 
 function parseDocs(raw) {
-  try { return JSON.parse(raw || '[]'); } catch { return []; }
+  let arr;
+  try { arr = JSON.parse(raw || '[]'); } catch { arr = []; }
+  if (!Array.isArray(arr)) return [];
+  const validos = new Set(DOCS_REQUERIDOS.map(d => d.id));
+  return arr.filter(id => validos.has(id));
 }
 
 function docsBadge(docsRaw) {
@@ -33,6 +47,11 @@ async function renderClientes() {
       <h2>Clientes</h2>
       <button class="btn-primary" onclick="renderClienteForm()">+ Nuevo cliente</button>
     </div>
+    <div style="margin-bottom:.75rem">
+      <input id="buscarCliente" type="text" placeholder="Buscar por nombre o DNI..."
+        oninput="filtrarClientes(this.value)"
+        style="width:100%;max-width:400px;padding:.5rem .75rem;border:1px solid #ddd;border-radius:6px;font-size:.95rem" />
+    </div>
     <table>
       <thead>
         <tr>
@@ -45,16 +64,16 @@ async function renderClientes() {
           <th></th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="tablaClientes">
         ${clientes.length === 0
           ? '<tr><td colspan="7" style="text-align:center;color:#999">Sin clientes registrados</td></tr>'
           : clientes.map(c => `
             <tr>
               <td><span style="font-family:var(--font-mono);font-size:.85rem;color:#888">C-${String(c.id).padStart(4,'0')}</span></td>
-              <td><strong>${c.apellido}, ${c.nombre}</strong></td>
-              <td>${c.dni}</td>
-              <td>${c.telefono || '-'}</td>
-              <td>${c.origen || '-'}</td>
+              <td><strong>${esc(c.apellido)}, ${esc(c.nombre)}</strong></td>
+              <td>${esc(c.dni)}</td>
+              <td>${esc(c.telefono || '-')}</td>
+              <td>${esc(c.origen || '-')}</td>
               <td>${docsBadge(c.documentacion_presentada)}</td>
               <td style="display:flex;gap:.3rem">
                 <button class="btn-secondary" style="margin:0" onclick="renderClienteDetalle(${c.id})">Ver</button>
@@ -89,7 +108,7 @@ async function renderClienteDetalle(id) {
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>
-        ${cliente.apellido}, ${cliente.nombre}
+        ${esc(cliente.apellido)}, ${esc(cliente.nombre)}
         <span style="font-family:var(--font-mono);font-size:.85rem;font-weight:400;color:#888;margin-left:.75rem">
           Legajo C-${String(cliente.id).padStart(4,'0')}
         </span>
@@ -101,10 +120,10 @@ async function renderClienteDetalle(id) {
     </div>
 
     <div class="cards" style="margin-bottom:1.5rem">
-      <div class="card"><div class="label">DNI</div><div class="value" style="font-size:1.2rem">${cliente.dni}</div></div>
-      <div class="card"><div class="label">CUIT</div><div class="value" style="font-size:1.2rem">${cliente.cuit || '-'}</div></div>
-      <div class="card"><div class="label">Teléfono</div><div class="value" style="font-size:1.2rem">${cliente.telefono || '-'}</div></div>
-      <div class="card"><div class="label">Origen</div><div class="value" style="font-size:1.2rem">${cliente.origen || '-'}</div></div>
+      <div class="card"><div class="label">DNI</div><div class="value" style="font-size:1.2rem">${esc(cliente.dni)}</div></div>
+      <div class="card"><div class="label">CUIT</div><div class="value" style="font-size:1.2rem">${esc(cliente.cuit || '-')}</div></div>
+      <div class="card"><div class="label">Teléfono</div><div class="value" style="font-size:1.2rem">${esc(cliente.telefono || '-')}</div></div>
+      <div class="card"><div class="label">Origen</div><div class="value" style="font-size:1.2rem">${esc(cliente.origen || '-')}</div></div>
       <div class="card"><div class="label">Alta</div><div class="value" style="font-size:1.1rem">${new Date(cliente.fecha_alta).toLocaleDateString('es-AR')}</div></div>
       <div class="card"><div class="label">Documentación</div><div class="value" style="font-size:1.3rem">${docs.length}/${DOCS_REQUERIDOS.length}</div>
         <div style="font-size:.75rem;color:${docs.length === DOCS_REQUERIDOS.length ? '#1b4332' : '#9a7b3f'};margin-top:.2rem">
@@ -133,7 +152,7 @@ async function renderClienteDetalle(id) {
       <!-- Observaciones -->
       <div style="background:white;border-radius:8px;padding:1.2rem;box-shadow:0 1px 4px rgba(0,0,0,.06)">
         <h4 style="margin-bottom:.75rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em;color:#666">Observaciones</h4>
-        <p style="font-size:.9rem;color:#555;white-space:pre-wrap">${cliente.observaciones || 'Sin observaciones.'}</p>
+        <p style="font-size:.9rem;color:#555;white-space:pre-wrap">${esc(cliente.observaciones || 'Sin observaciones.')}</p>
       </div>
     </div>
 
@@ -164,13 +183,47 @@ async function renderClienteDetalle(id) {
   `;
 }
 
+  window.filtrarClientes = (q) => {
+    const term = q.toLowerCase().trim();
+    document.querySelectorAll('#tablaClientes tr').forEach(tr => {
+      tr.style.display = !term || tr.textContent.toLowerCase().includes(term) ? '' : 'none';
+    });
+  };
+
+
 async function renderClienteForm(id = null) {
   const app = document.getElementById('app');
   const cliente = id ? await api.get(`/clientes/${id}`).catch(() => null) : null;
   const docsActuales = parseDocs(cliente?.documentacion_presentada);
   const grupos = [...new Set(DOCS_REQUERIDOS.map(d => d.grupo))];
 
+  const origenActual = (cliente?.origen || '').trim();
+  const origenMatch  = ORIGENES.find(o => o.toLowerCase() === origenActual.toLowerCase()) || '';
+  const origenEsOtro = !!origenActual && !origenMatch;
+
   app.innerHTML = `
+    <style>
+      .doc-item { display:flex; align-items:center; gap:.6rem; cursor:pointer;
+        padding:.55rem .7rem; margin-bottom:.4rem; border-radius:7px;
+        border:1.5px solid #e3ddd0; background:#fff; transition:background .12s,border-color .12s; }
+      .doc-item:hover { border-color:#bdb4a0; }
+      .doc-item input[type=checkbox] {
+        appearance:none; -webkit-appearance:none;
+        width:22px; height:22px; margin:0; padding:0; flex-shrink:0; cursor:pointer;
+        border:2px solid #b9b1a0; border-radius:5px; background:#fff;
+        position:relative; transition:background .12s,border-color .12s; }
+      .doc-item input[type=checkbox]:checked { background:#1b4332; border-color:#1b4332; }
+      .doc-item input[type=checkbox]:checked::after {
+        content:''; position:absolute; left:7px; top:3px;
+        width:5px; height:10px; border:solid #fff; border-width:0 3px 3px 0;
+        transform:rotate(45deg); }
+      .doc-item .doc-texto { font-size:.88rem; color:#555; }
+      .doc-item .doc-ok { display:none; margin-left:auto; font-size:.72rem; font-weight:700;
+        color:#1b4332; background:#cfe7d6; padding:.14rem .55rem; border-radius:10px; white-space:nowrap; }
+      .doc-item:has(input:checked) { background:#e7f2ea; border-color:#1b4332; }
+      .doc-item:has(input:checked) .doc-texto { color:#1b4332; font-weight:600; }
+      .doc-item:has(input:checked) .doc-ok { display:inline; }
+    </style>
     <div class="seccion-titulo">
       <h2>
         ${id ? 'Editar cliente' : 'Nuevo cliente'}
@@ -179,13 +232,24 @@ async function renderClienteForm(id = null) {
       <button class="btn-secondary" onclick="${id ? `renderClienteDetalle(${id})` : 'renderClientes()'}">← Volver</button>
     </div>
     <form id="formCliente">
-      <div class="form-group"><label>Nombre *</label><input name="nombre" value="${cliente?.nombre || ''}" required /></div>
-      <div class="form-group"><label>Apellido *</label><input name="apellido" value="${cliente?.apellido || ''}" required /></div>
-      <div class="form-group"><label>DNI * (requerido UIF)</label><input name="dni" value="${cliente?.dni || ''}" required /></div>
-      <div class="form-group"><label>CUIT (requerido UIF)</label><input name="cuit" value="${cliente?.cuit || ''}" placeholder="20-12345678-9" /></div>
-      <div class="form-group"><label>Teléfono</label><input name="telefono" value="${cliente?.telefono || ''}" /></div>
-      <div class="form-group"><label>Origen / Referido</label><input name="origen" value="${cliente?.origen || ''}" /></div>
-      <div class="form-group"><label>Observaciones</label><textarea name="observaciones">${cliente?.observaciones || ''}</textarea></div>
+      <div class="form-group"><label>Nombre *</label><input name="nombre" value="${esc(cliente?.nombre || '')}" required /></div>
+      <div class="form-group"><label>Apellido *</label><input name="apellido" value="${esc(cliente?.apellido || '')}" required /></div>
+      <div class="form-group"><label>DNI * (requerido UIF)</label><input name="dni" value="${esc(cliente?.dni || '')}" required /></div>
+      <div class="form-group"><label>CUIT (requerido UIF)</label><input name="cuit" value="${esc(cliente?.cuit || '')}" placeholder="20-12345678-9" /></div>
+      <div class="form-group"><label>Teléfono</label><input name="telefono" value="${esc(cliente?.telefono || '')}" /></div>
+      <div class="form-group">
+        <label>Origen / Referido</label>
+        <select name="origen_select" id="origenSelect" onchange="window.toggleOrigenOtro()">
+          <option value="">Seleccionar...</option>
+          ${ORIGENES.map(o => `<option value="${o}" ${origenMatch === o ? 'selected' : ''}>${o}</option>`).join('')}
+          <option value="__otro__" ${origenEsOtro ? 'selected' : ''}>Otro (especificar)…</option>
+        </select>
+        <input type="text" name="origen_otro" id="origenOtro" placeholder="Especificar origen"
+          value="${origenEsOtro ? origenActual : ''}"
+          style="margin-top:.5rem;display:${origenEsOtro ? 'block' : 'none'}" />
+      </div>
+      <div class="form-group"><label>Domicilio</label><input name="domicilio" value="${esc(cliente?.domicilio || '')}" /></div>
+      <div class="form-group"><label>Observaciones</label><textarea name="observaciones">${esc(cliente?.observaciones || '')}</textarea></div>
 
       <div class="form-group" style="margin-top:1.25rem">
         <label style="font-size:.95rem;font-weight:700;margin-bottom:.6rem;display:block">
@@ -199,11 +263,11 @@ async function renderClienteForm(id = null) {
             <div style="margin-bottom:.9rem">
               <div style="font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#9a7b3f;margin-bottom:.4rem">${grupo}</div>
               ${DOCS_REQUERIDOS.filter(d => d.grupo === grupo).map(doc => `
-                <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;padding:.28rem 0;font-size:.88rem;font-weight:400;color:#333">
+                <label class="doc-item">
                   <input type="checkbox" name="doc_${doc.id}" value="${doc.id}"
-                    style="width:16px;height:16px;margin-top:.1rem;flex-shrink:0;cursor:pointer;accent-color:#1b4332"
                     ${docsActuales.includes(doc.id) ? 'checked' : ''} />
-                  ${doc.label}
+                  <span class="doc-texto">${doc.label}</span>
+                  <span class="doc-ok">✓ PRESENTADO</span>
                 </label>
               `).join('')}
             </div>
@@ -227,6 +291,16 @@ async function renderClienteForm(id = null) {
     });
   });
 
+  // Campo libre cuando el origen es "Otro"
+  window.toggleOrigenOtro = () => {
+    const sel  = document.getElementById('origenSelect');
+    const otro = document.getElementById('origenOtro');
+    if (!sel || !otro) return;
+    const esOtro = sel.value === '__otro__';
+    otro.style.display = esOtro ? 'block' : 'none';
+    if (esOtro) otro.focus();
+  };
+
   document.getElementById('formCliente').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(e.target).entries());
@@ -235,6 +309,13 @@ async function renderClienteForm(id = null) {
       .map(doc => doc.id);
     Object.keys(fd).filter(k => k.startsWith('doc_')).forEach(k => delete fd[k]);
     fd.documentacion_presentada = docsSeleccionados;
+
+    // Resolver origen (desplegable + opción "Otro")
+    fd.origen = fd.origen_select === '__otro__'
+      ? (fd.origen_otro || '').trim()
+      : (fd.origen_select || '');
+    delete fd.origen_select;
+    delete fd.origen_otro;
 
     const msg = document.getElementById('formMsg');
     try {
@@ -246,4 +327,71 @@ async function renderClienteForm(id = null) {
       msg.innerHTML = `<span class="msg-error">${err.message}</span>`;
     }
   });
+}
+
+async function verPerfilCliente(id) {
+  const app = document.getElementById('app');
+  app.innerHTML = '<p>Cargando...</p>';
+
+  const [cliente, todosPrestamos] = await Promise.all([
+    api.get('/clientes/' + id).catch(() => null),
+    api.get('/prestamos?id_cliente=' + id).catch(() => [])
+  ]);
+
+  if (!cliente) { app.innerHTML = '<p class="msg-error">Cliente no encontrado.</p>'; return; }
+
+  const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+  const semaforo = p => {
+    if (p.estado === 'cancelado') return '<span class="badge badge-verde">Cancelado</span>';
+    if (p.estado === 'mora')      return '<span class="badge badge-rojo">Mora</span>';
+    if (p.estado === 'archivado') return '<span class="badge" style="background:#f0f0f0;color:#888">Archivado</span>';
+    return '<span class="badge badge-verde">Activo</span>';
+  };
+
+  const totalPrestado = todosPrestamos.reduce((s, p) => s + parseFloat(p.monto_capital), 0);
+  const activos       = todosPrestamos.filter(p => p.estado === 'activo' || p.estado === 'mora').length;
+
+  app.innerHTML = `
+    <div class="seccion-titulo">
+      <h2>${esc(cliente.apellido)}, ${esc(cliente.nombre)}</h2>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn-secondary" onclick="renderClienteForm(${id})">Editar</button>
+        <button class="btn-secondary" onclick="renderClientes()">← Volver</button>
+      </div>
+    </div>
+
+    <div class="cards" style="margin-bottom:1.5rem">
+      <div class="card"><div class="label">DNI</div><div class="value" style="font-size:1.2rem">${esc(cliente.dni)}</div></div>
+      <div class="card"><div class="label">CUIT</div><div class="value" style="font-size:1.2rem">${esc(cliente.cuit || '—')}</div></div>
+      <div class="card"><div class="label">Teléfono</div><div class="value" style="font-size:1.2rem">${esc(cliente.telefono || '—')}</div></div>
+      <div class="card"><div class="label">Préstamos activos</div><div class="value">${activos}</div></div>
+      <div class="card"><div class="label">Total prestado</div><div class="value" style="font-size:1.1rem">$${fmt(totalPrestado)}</div></div>
+    </div>
+
+    ${cliente.domicilio ? '<p style="margin-bottom:1.25rem;font-size:.9rem;color:var(--ink-2)">📍 ' + cliente.domicilio + '</p>' : ''}
+    ${cliente.observaciones ? '<p style="margin-bottom:1.25rem;font-size:.85rem;color:var(--ink-3);font-style:italic">' + cliente.observaciones + '</p>' : ''}
+
+    <div class="seccion-titulo" style="margin-bottom:.75rem">
+      <h3>Historial de préstamos (${todosPrestamos.length})</h3>
+      <button class="btn-primary" onclick="renderPrestamoForm(${id})">+ Nuevo préstamo</button>
+    </div>
+
+    ${todosPrestamos.length === 0 ? '<p style="color:var(--ink-3)">Sin préstamos registrados.</p>' : `
+    <table>
+      <thead>
+        <tr><th>Legajo</th><th>Capital</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${todosPrestamos.map(p => `
+          <tr>
+            <td style="font-family:var(--font-mono);font-size:.82rem;color:#888">P-${String(p.id).padStart(4,'0')}</td>
+            <td>$${fmt(p.monto_capital)} ${p.moneda}</td>
+            <td>${p.total_cuotas} ${p.periodicidad === 'semanal' ? 'sem.' : 'cuotas'}</td>
+            <td>${String(p.primer_vencimiento).split('T')[0]}</td>
+            <td>${semaforo(p)}</td>
+            <td><button class="btn-secondary" style="margin:0" onclick="renderPrestamoDetalle(${p.id})">Ver</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  `;
 }

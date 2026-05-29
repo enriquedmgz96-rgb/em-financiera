@@ -4,7 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/connection');
 
-const SECRET = process.env.JWT_SECRET || 'em-financiera-2026-secret';
+// JWT_SECRET garantizado por el fail-fast en app.js. Sin fallback inseguro.
+const SECRET = process.env.JWT_SECRET;
 
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {

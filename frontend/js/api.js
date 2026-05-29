@@ -1,3 +1,28 @@
+// === XSS protection helpers (cargados antes que cualquier renderer) ===
+// esc(v):    para interpolar texto/atributos en HTML — escapa &<>"'
+// escJs(v):  para interpolar valores en strings JS de onclick="foo('${escJs(x)}')"
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function escJs(v) {
+  if (v === null || v === undefined) return '';
+  return String(v)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/</g, '\\u003c');
+}
+window.esc = esc;
+window.escJs = escJs;
+
 const API_BASE = '/api';
 
 async function apiFetch(path, options = {}) {

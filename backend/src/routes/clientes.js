@@ -11,7 +11,7 @@ router.get('/', async (req, res, next) => {
 });
 
 router.post('/', async (req, res, next) => {
-  const { nombre, apellido, dni, cuit, telefono, origen, observaciones, documentacion_presentada } = req.body;
+  const { nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio, documentacion_presentada } = req.body;
   if (!nombre || !apellido || !dni) {
     return res.status(400).json({ error: 'nombre, apellido y dni son requeridos (UIF Res. 30/2017)' });
   }
@@ -24,9 +24,9 @@ router.post('/', async (req, res, next) => {
     : (documentacion_presentada || '[]');
   try {
     const { rows } = await pool.query(
-      `INSERT INTO clientes (nombre, apellido, dni, cuit, telefono, origen, observaciones, documentacion_presentada)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [nombre, apellido, dni, cuit || null, telefono || null, origen || null, observaciones || null, docJson]
+      `INSERT INTO clientes (nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio, documentacion_presentada)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [nombre, apellido, dni, cuit || null, telefono || null, origen || null, observaciones || null, domicilio || null, docJson]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -44,7 +44,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 router.put('/:id', async (req, res, next) => {
-  const { nombre, apellido, dni, cuit, telefono, origen, observaciones, documentacion_presentada } = req.body;
+  const { nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio, documentacion_presentada } = req.body;
   if (cuit) {
     const v = validarCUIT(cuit);
     if (!v.valido) return res.status(400).json({ error: `CUIT inválido: ${v.mensaje}` });
@@ -62,9 +62,10 @@ router.put('/:id', async (req, res, next) => {
          telefono                 = COALESCE($5, telefono),
          origen                   = COALESCE($6, origen),
          observaciones            = COALESCE($7, observaciones),
-         documentacion_presentada = COALESCE($8, documentacion_presentada)
-       WHERE id = $9 RETURNING *`,
-      [nombre, apellido, dni, cuit, telefono, origen, observaciones, docJson ?? null, req.params.id]
+         domicilio                = COALESCE($8, domicilio),
+         documentacion_presentada = COALESCE($9, documentacion_presentada)
+       WHERE id = $10 RETURNING *`,
+      [nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio || null, docJson ?? null, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
     res.json(rows[0]);

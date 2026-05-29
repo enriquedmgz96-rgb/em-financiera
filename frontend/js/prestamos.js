@@ -1,3 +1,17 @@
+async function descargarPDF(url, filename) {
+  try {
+    const token = localStorage.getItem('em_token');
+    const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!res.ok) { alert('Error al generar el archivo'); return; }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch(e) { alert("Error: " + e.message); }
+}
+
 async function renderPrestamos(verArchivados = false) {
   const app = document.getElementById('app');
   app.innerHTML = '<p>Cargando...</p>';
@@ -11,6 +25,9 @@ async function renderPrestamos(verArchivados = false) {
     return '<span class="badge badge-verde">Activo</span>';
   };
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+  const badgePer = p => p.periodicidad === 'semanal'
+    ? '<span class="badge" style="background:#d6eaf8;color:#2980b9;font-size:.72rem;margin-left:.3rem">SEMANAL</span>'
+    : '';
 
   app.innerHTML = `
     <div class="seccion-titulo">
@@ -25,20 +42,20 @@ async function renderPrestamos(verArchivados = false) {
     ${verArchivados ? '<p style="color:#888;font-size:.85rem;margin-bottom:1rem">Mostrando préstamos archivados (ocultos de la lista principal)</p>' : ''}
     <table>
       <thead>
-        <tr><th>Legajo</th><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th>Creado por</th><th></th></tr>
+        <tr><th>Legajo</th><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas/Sem.</th><th>1er Vcto</th><th>Estado</th><th>Creado por</th><th></th></tr>
       </thead>
       <tbody>
         ${prestamos.length === 0 ? `<tr><td colspan="8" style="text-align:center;color:#999">${verArchivados ? 'No hay préstamos archivados' : 'Sin préstamos registrados'}</td></tr>` :
           prestamos.map(p => `
             <tr>
               <td><span style="font-family:var(--font-mono);font-size:.82rem;color:#888">P-${String(p.id).padStart(4,'0')}</span></td>
-              <td>${p.apellido}, ${p.nombre}</td>
+              <td>${esc(p.apellido)}, ${esc(p.nombre)}</td>
               <td>$${fmt(p.monto_capital)} ${p.moneda}</td>
               <td>${parseFloat(p.tasa_interes_mensual)}% m.</td>
               <td>${p.total_cuotas}</td>
               <td>${String(p.primer_vencimiento).split('T')[0]}</td>
-              <td>${semaforo(p)}</td>
-              <td style="font-size:.82rem;color:#888">${p.creado_por_nombre || '-'}</td>
+              <td>${semaforo(p)} ${badgePer(p)}</td>
+              <td style="font-size:.82rem;color:#888">${esc(p.creado_por_nombre || '-')}</td>
               <td><button class="btn-secondary" style="margin:0" onclick="renderPrestamoDetalle(${p.id})">Ver</button></td>
             </tr>`).join('')}
       </tbody>
@@ -54,13 +71,31 @@ async function renderPrestamoDetalle(id) {
 
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
 
+  // Etiqueta del tipo de pago con badge de color.
+  // - "cuota_completa" / "solo_interes" → siempre el mismo nombre.
+  // - "adelanto_parcial" se distingue según monto vs. cuota completa teórica:
+  //     · monto > cuota+interés → Adelanto parcial (paga de más, acelera capital)
+  //     · monto < cuota+interés → Pago parcial   (cobertura incompleta)
+  //     · monto ≈ cuota+interés → Cuota completa (igualó exacto un pago libre)
+  const labelTipo = pg => {
+    const tipo = pg.tipo_pago;
+    if (tipo === 'cuota_completa') return '<span class="badge" style="background:#d5f5e3;color:#27ae60">Cuota completa</span>';
+    if (tipo === 'solo_interes')   return '<span class="badge" style="background:#fef9e7;color:#f39c12">Solo interés</span>';
+    const cuotaEsperada = parseFloat(p.valor_cuota_base) + parseFloat(pg.interes_pagado);
+    const monto = parseFloat(pg.monto_pagado);
+    const tol = 0.5;
+    if (monto > cuotaEsperada + tol) return '<span class="badge" style="background:#d6eaf8;color:#2980b9">Adelanto parcial</span>';
+    if (monto < cuotaEsperada - tol) return '<span class="badge" style="background:#fdecea;color:#c0392b">Pago parcial</span>';
+    return '<span class="badge" style="background:#d5f5e3;color:#27ae60">Cuota completa</span>';
+  };
+
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>
         <span style="font-family:var(--font-mono);font-size:.82rem;font-weight:400;color:#888;display:block;margin-bottom:.2rem">
           Legajo P-${String(p.id).padStart(4,'0')} · Cliente C-${String(p.id_cliente).padStart(4,'0')}
         </span>
-        ${p.apellido}, ${p.nombre}
+        ${esc(p.apellido)}, ${esc(p.nombre)}
         <span style="font-size:.75rem;font-weight:600;padding:.2rem .7rem;border-radius:12px;margin-left:.75rem;vertical-align:middle;${
           p.tipo_amortizacion === 'flat' ? 'background:#d5f5e3;color:#27ae60' :
           p.tipo_amortizacion === 'frances' ? 'background:#d6eaf8;color:#2980b9' :
@@ -101,15 +136,15 @@ async function renderPrestamoDetalle(id) {
           <tr>
             <td>${String(pg.fecha_pago_real).split('T')[0].split('-').reverse().join('/')}</td>
             <td style="font-size:.8rem;color:#999">${new Date(pg.fecha_registro).toLocaleDateString('es-AR')}</td>
-            <td>${pg.tipo_pago.replace(/_/g, ' ')}</td>
-            <td>${pg.forma_pago || 'efectivo'}</td>
+            <td>${labelTipo(pg)}</td>
+            <td>${esc(pg.forma_pago || 'efectivo')}</td>
             <td>$${fmt(pg.monto_pagado)}</td>
             <td>$${fmt(pg.capital_amortizado)}</td>
             <td>$${fmt(pg.interes_pagado)}</td>
             <td>$${fmt(pg.saldo_capital_post_pago)}</td>
-            <td style="font-size:.8rem;color:#888">${pg.creado_por_nombre || '-'}</td>
+            <td style="font-size:.8rem;color:#888">${esc(pg.creado_por_nombre || '-')}</td>
             <td style="display:flex;gap:.3rem">
-              <a href="/api/pagos/${pg.id}/recibo" target="_blank"><button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem">PDF</button></a>
+              <button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem" onclick="descargarPDF('/api/pagos/${pg.id}/recibo','recibo-${pg.id}.pdf')">PDF</button>
               <button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem;color:var(--rojo)" onclick="eliminarPago(${pg.id}, ${p.id})">✕</button>
             </td>
           </tr>`).join('')}
@@ -118,12 +153,8 @@ async function renderPrestamoDetalle(id) {
 
     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
       ${p.estado !== 'archivado' ? `<button class="btn-primary" onclick="renderPagoForm(${p.id})">Registrar pago</button>` : ''}
-      <a href="/api/prestamos/${p.id}/contrato" target="_blank">
-        <button class="btn-secondary">Descargar contrato</button>
-      </a>
-      <a href="/api/prestamos/${p.id}/resumen" target="_blank">
-        <button class="btn-secondary">Estado de cuenta</button>
-      </a>
+      <button class="btn-secondary" onclick="descargarPDF('/api/prestamos/${p.id}/contrato-mutuo','mutuo-prestamo-${p.id}.docx')">Descargar contrato</button>
+      <button class="btn-secondary" onclick="descargarPDF('/api/prestamos/${p.id}/resumen','estado-cuenta-${p.id}.pdf')">Estado de cuenta</button>
       ${p.estado === 'archivado'
         ? `<button class="btn-secondary" style="color:var(--verde-mid)" onclick="desarchivarPrestamo(${p.id})">Desarchivar</button>`
         : `<button class="btn-secondary" style="color:#888;margin-left:auto" onclick="archivarPrestamo(${p.id})">Archivar</button>`
@@ -134,13 +165,20 @@ async function renderPrestamoDetalle(id) {
 
 async function renderPrestamoForm(idClientePreseleccionado = null) {
   const app = document.getElementById('app');
-  const [clientes, categorias] = await Promise.all([
+  const [clientes, categoriasMensual, categoriasSemanal] = await Promise.all([
     api.get('/clientes').catch(() => []),
-    api.get('/categorias').catch(() => [])
+    api.get('/categorias?periodicidad=mensual').catch(() => []),
+    api.get('/categorias?periodicidad=semanal').catch(() => [])
   ]);
 
   const colorBadge = c => ({ verde: '#1b4332', amarillo: '#9a7b3f', rojo: '#c0392b', azul: '#2980b9' }[c] || '#2980b9');
   const CUOTAS_OPTS = [1,2,3,4,5,6,7,8,9,10,11,12,18];
+
+  const botonesCategorias = (cats, isSem) => cats.map((c, i) => `
+    <button type="button" onclick="_selCat(${parseFloat(c.tasa_mensual)}, this)"
+      style="border:2px solid ${colorBadge(c.color)};background:${i===0 ? colorBadge(c.color) : 'white'};color:${i===0 ? 'white' : colorBadge(c.color)};padding:.35rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;font-size:.9rem;transition:.15s">
+      ${parseFloat(c.tasa_mensual)}% ${isSem ? 'semanal' : 'mensual'}
+    </button>`).join('');
 
   app.innerHTML = `
     <div class="seccion-titulo">
@@ -152,7 +190,7 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
         <label>Cliente *</label>
         <select name="id_cliente" required>
           <option value="">Seleccionar...</option>
-          ${clientes.map(c => `<option value="${c.id}" ${idClientePreseleccionado == c.id ? 'selected' : ''}>${c.apellido}, ${c.nombre} — DNI ${c.dni} (C-${String(c.id).padStart(4,'0')})</option>`).join('')}
+          ${clientes.map(c => `<option value="${c.id}" ${idClientePreseleccionado == c.id ? 'selected' : ''}>${esc(c.apellido)}, ${esc(c.nombre)} — DNI ${esc(c.dni)} (C-${String(c.id).padStart(4,'0')})</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -167,38 +205,50 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
         </small>
       </div>
       <div class="form-group">
+        <label>Periodicidad de cuotas</label>
+        <div style="display:flex;gap:.5rem">
+          <button type="button" id="btnMensual"
+            style="flex:1;padding:.55rem;border:2px solid #1b4332;background:#1b4332;color:white;border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit">
+            Mensual
+          </button>
+          <button type="button" id="btnSemanal"
+            style="flex:1;padding:.55rem;border:2px solid #1b4332;background:white;color:#1b4332;border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit">
+            Semanal
+          </button>
+        </div>
+      </div>
+      <input type="hidden" name="periodicidad" id="inputPeriodicidad" value="mensual" />
+
+      <div class="form-group">
         <label>Monto capital *</label>
         <div style="display:flex;gap:.5rem">
-          <input name="monto_capital" id="montoCapital" type="number" step="0.01" required style="flex:1" />
+          <input id="montoCapital" type="text" inputmode="numeric" required placeholder="$ 0" style="flex:1" />
           <select name="moneda" id="monedaSelect" style="width:120px">
             <option value="ARS">ARS $</option>
             <option value="USD">USD $</option>
           </select>
         </div>
+        <input type="hidden" name="monto_capital" id="montoCapitalRaw" />
       </div>
 
       <div class="form-group">
         <label>Tasa de interés *</label>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.4rem" id="btnsCategorias">
-          ${categorias.map((c, i) => `
-            <button type="button" onclick="_selCat(${parseFloat(c.tasa_mensual)}, this)"
-              style="border:2px solid ${colorBadge(c.color)};background:${i===0 ? colorBadge(c.color) : 'white'};color:${i===0 ? 'white' : colorBadge(c.color)};padding:.35rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;font-size:.9rem;transition:.15s">
-              ${parseFloat(c.tasa_mensual)}% mensual
-            </button>`).join('')}
+          ${botonesCategorias(categoriasMensual, false)}
           <span style="font-size:.8rem;color:#888;align-self:center" id="labelTasaPersonalizada"></span>
         </div>
         <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center">
           <small style="color:#888">O ingresar tasa manual:</small>
           <input type="number" id="tasaManual" step="0.01" min="0" placeholder="ej: 8.5"
             style="width:90px;padding:.3rem .5rem;font-size:.85rem;border:1px solid #ddd;border-radius:6px" />
-          <small style="color:#888">% mensual</small>
+          <small style="color:#888" id="labelTasaManualUnidad">% mensual</small>
         </div>
       </div>
       <input type="hidden" name="tasa_interes_mensual" id="tasaHidden"
-        value="${categorias.length > 0 ? parseFloat(categorias[0].tasa_mensual) : ''}" />
+        value="${categoriasMensual.length > 0 ? parseFloat(categoriasMensual[0].tasa_mensual) : ''}" />
 
       <div class="form-group">
-        <label>Cantidad de cuotas *</label>
+        <label id="labelCuotas">Cantidad de cuotas *</label>
         <select name="total_cuotas" id="selectorCuotas" required>
           <option value="">Seleccionar...</option>
           ${CUOTAS_OPTS.map(n => `<option value="${n}">${n} cuota${n>1?'s':''}</option>`).join('')}
@@ -228,6 +278,8 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
       <div class="form-group"><label>Nombre garantía</label><input name="nombre_garantia" /></div>
       <div class="form-group"><label>Teléfono garantía</label><input name="telefono_garantia" /></div>
       <div class="form-group"><label>DNI garantía</label><input name="dni_garantia" /></div>
+      <div class="form-group"><label>CUIL garantía *</label><input name="cuil_garantia" required /></div>
+      <div class="form-group"><label>Domicilio garantía *</label><input name="domicilio_garantia" required /></div>
       <div class="form-group"><label>Observaciones</label><textarea name="observaciones"></textarea></div>
 
       <div id="proyeccion" style="margin:1rem 0"></div>
@@ -278,18 +330,28 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
   function actualizarInfoTasa() {
     const tasa = parseFloat(document.getElementById('tasaHidden').value);
     const cuotas = parseInt(document.getElementById('selectorCuotas').value);
+    const isSem = document.getElementById('inputPeriodicidad').value === 'semanal';
     const info = document.getElementById('infoTasa');
     if (tasa && cuotas) {
-      info.textContent = `Tasa mensual: ${tasa}%  |  Tasa total: ${parseFloat((tasa * cuotas).toFixed(2))}%`;
+      const palabra = isSem ? 'semanal' : 'mensual';
+      info.textContent = `Tasa ${palabra}: ${tasa}%  |  Tasa total: ${parseFloat((tasa * cuotas).toFixed(2))}%`;
     } else {
       info.textContent = '';
     }
   }
 
-  document.getElementById('montoCapital').addEventListener('input', actualizarProyeccion);
+  // Formato de monto: separador de miles y signo $, sin decimales
+  const montoInput = document.getElementById('montoCapital');
+  const montoRaw   = document.getElementById('montoCapitalRaw');
+  montoInput.addEventListener('input', () => {
+    const digits = montoInput.value.replace(/\D/g, '');
+    montoRaw.value = digits;
+    montoInput.value = digits ? '$ ' + Number(digits).toLocaleString('es-AR') : '';
+    actualizarProyeccion();
+  });
 
   async function actualizarProyeccion() {
-    const cap = parseFloat(document.getElementById('montoCapital').value);
+    const cap = parseFloat(document.getElementById('montoCapitalRaw').value);
     const tasa = parseFloat(document.getElementById('tasaHidden').value);
     const cuotas = parseInt(document.getElementById('selectorCuotas').value);
     const tipoAmort = document.getElementById('tipoAmortizacion').value;
@@ -363,6 +425,47 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
       `;
     } catch (_) {}
   }
+
+  function cambiarPeriodo(p) {
+    const isSem = p === 'semanal';
+    document.getElementById('inputPeriodicidad').value = p;
+    const btnM = document.getElementById('btnMensual');
+    const btnS = document.getElementById('btnSemanal');
+    btnM.style.background = isSem ? 'white' : '#1b4332';
+    btnM.style.color = isSem ? '#1b4332' : 'white';
+    btnS.style.background = isSem ? '#1b4332' : 'white';
+    btnS.style.color = isSem ? 'white' : '#1b4332';
+    const lbl = document.getElementById('labelCuotas');
+    if (lbl) lbl.textContent = isSem ? 'Cantidad de semanas *' : 'Cantidad de cuotas *';
+    const lblUnidad = document.getElementById('labelTasaManualUnidad');
+    if (lblUnidad) lblUnidad.textContent = isSem ? '% semanal' : '% mensual';
+    const sel = document.getElementById('selectorCuotas');
+    const opts = isSem ? [1,2,3,4,5,6,7,8,9,10,11,12] : [1,2,3,4,5,6,7,8,9,10,11,12,18];
+    sel.innerHTML = '<option value="">Seleccionar...</option>' +
+      opts.map(n => '<option value="' + n + '">' + n + (isSem ? (' semana' + (n>1?'s':'')) : (' cuota' + (n>1?'s':''))) + '</option>').join('');
+    sel.value = '';
+    document.getElementById('tasaManual').value = '';
+    rebuildCategorias(isSem);
+    document.getElementById('infoTasa').textContent = '';
+    actualizarProyeccion();
+  }
+
+  function rebuildCategorias(isSem) {
+    const cats = isSem ? categoriasSemanal : categoriasMensual;
+    const cont = document.getElementById('btnsCategorias');
+    cont.innerHTML = botonesCategorias(cats, isSem) +
+      '<span style="font-size:.8rem;color:#888;align-self:center" id="labelTasaPersonalizada"></span>';
+    const first = cont.querySelector('button');
+    if (first) {
+      first.click();
+    } else {
+      document.getElementById('tasaHidden').value = '';
+      actualizarInfoTasa();
+    }
+  }
+
+  document.getElementById('btnMensual').addEventListener('click', () => cambiarPeriodo('mensual'));
+  document.getElementById('btnSemanal').addEventListener('click', () => cambiarPeriodo('semanal'));
 
   document.getElementById('formPrestamo').addEventListener('submit', async e => {
     e.preventDefault();

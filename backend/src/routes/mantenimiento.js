@@ -9,12 +9,12 @@ router.post('/actualizar-mora', async (req, res, next) => {
       SET estado = 'mora'
       FROM (
         SELECT pr.id,
-               (pr.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date AS proximo_vcto
+               (pr.primer_vencimiento + (COUNT(pg.id) * CASE pr.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date AS proximo_vcto
         FROM prestamos pr
         LEFT JOIN pagos pg ON pg.id_prestamo = pr.id
         WHERE pr.estado = 'activo'
         GROUP BY pr.id
-        HAVING (pr.primer_vencimiento + (COUNT(pg.id) * INTERVAL '30 days'))::date < CURRENT_DATE
+        HAVING (pr.primer_vencimiento + (COUNT(pg.id) * CASE pr.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date < CURRENT_DATE
       ) AS vencidos
       WHERE p.id = vencidos.id
       RETURNING p.id

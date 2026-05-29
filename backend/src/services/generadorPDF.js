@@ -27,6 +27,24 @@ function _fmtFechaTS(f) {
   return new Date(f).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba', day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+// Etiqueta legible del tipo de pago.
+// "adelanto_parcial" se distingue según monto vs. cuota completa teórica:
+//   monto > cuota_base+interés → "Adelanto parcial"
+//   monto < cuota_base+interés → "Pago parcial"
+//   monto ≈ cuota_base+interés → "Cuota completa"
+function _labelTipoPago(pago, prestamo) {
+  const tipo = pago.tipo_pago;
+  if (tipo === 'cuota_completa') return 'Cuota completa';
+  if (tipo === 'solo_interes')   return 'Solo interés';
+  const cuotaBase = parseFloat(prestamo.valor_cuota_base || 0);
+  const cuotaEsperada = cuotaBase + parseFloat(pago.interes_pagado || 0);
+  const monto = parseFloat(pago.monto_pagado || 0);
+  const tol = 0.5;
+  if (monto > cuotaEsperada + tol) return 'Adelanto parcial';
+  if (monto < cuotaEsperada - tol) return 'Pago parcial';
+  return 'Cuota completa';
+}
+
 function _escribirContrato(doc, p, tabla, startY, titulo) {
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
   const fecha = _fmtFechaTS(p.fecha);
@@ -133,7 +151,7 @@ function _escribirRecibo(doc, pago, p, startY, titulo) {
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(10)
     .text(`MONTO PAGADO: $${fmt(pago.monto_pagado)} ${p.moneda}`, col1 + 10, y + 5);
   doc.font('Helvetica').fontSize(8.5)
-    .text(`Tipo: ${pago.tipo_pago.replace(/_/g, ' ')}   |   Forma: ${pago.forma_pago || 'efectivo'}   |   Capital amort.: $${fmt(pago.capital_amortizado)}   |   Interés: $${fmt(pago.interes_pagado)}`, col1 + 10, y + 20);
+    .text(`Tipo: ${_labelTipoPago(pago, p)}   |   Forma: ${pago.forma_pago || 'efectivo'}   |   Capital amort.: $${fmt(pago.capital_amortizado)}   |   Interés: $${fmt(pago.interes_pagado)}`, col1 + 10, y + 20);
   y += 50;
 
   if (pago.observaciones) {
@@ -255,7 +273,7 @@ function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
       const vals = [
         idx + 1,
         fmtFecha(pg.fecha_pago_real),
-        pg.tipo_pago.replace(/_/g, ' '),
+        _labelTipoPago(pg, prestamo),
         pg.forma_pago || 'efectivo',
         `$${fmt(pg.monto_pagado)}`,
         `$${fmt(pg.capital_amortizado)}`,

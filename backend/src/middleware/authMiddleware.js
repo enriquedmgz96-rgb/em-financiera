@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
-const SECRET = process.env.JWT_SECRET || 'em-financiera-2026-secret';
+// JWT_SECRET es garantizado por el fail-fast en app.js. Sin fallback inseguro.
+const SECRET = process.env.JWT_SECRET;
 
 module.exports = (req, res, next) => {
   const auth = req.headers.authorization;

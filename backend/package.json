@@ -15,7 +15,8 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "pdfkit": "^0.18.0",
-    "pg": "^8.11.5"
+    "pg": "^8.11.5",
+    "docx": "^9.5.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

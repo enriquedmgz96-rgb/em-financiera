@@ -28,9 +28,14 @@ router.get('/', async (req, res, next) => {
 });
 
 router.post('/', async (req, res, next) => {
-  const { id_cliente, moneda, monto_capital, tasa_interes_mensual, total_cuotas,
-    primer_vencimiento, pagare_firmado, motivo, nombre_garantia,
-    telefono_garantia, dni_garantia, observaciones, tipo_amortizacion } = req.body;
+  const {
+    id_cliente, moneda, monto_capital, tasa_interes_mensual,
+    total_cuotas, primer_vencimiento, pagare_firmado,
+    nombre_garantia, telefono_garantia, dni_garantia, cuil_garantia, domicilio_garantia,
+    observaciones, periodicidad, motivo,
+    tipo_amortizacion
+  } = req.body;
+  const _periodicidad = periodicidad || 'mensual';
   if (!id_cliente || !monto_capital || !tasa_interes_mensual || !total_cuotas || !primer_vencimiento) {
     return res.status(400).json({ error: 'Faltan campos requeridos: id_cliente, monto_capital, tasa_interes_mensual, total_cuotas, primer_vencimiento' });
   }
@@ -44,13 +49,16 @@ router.post('/', async (req, res, next) => {
     const { rows } = await pool.query(
       `INSERT INTO prestamos
          (id_cliente, moneda, monto_capital, tasa_interes_mensual, total_cuotas,
-          valor_cuota_base, primer_vencimiento, estado, pagare_firmado, motivo,
-          nombre_garantia, telefono_garantia, dni_garantia, observaciones, tipo_amortizacion,
+          valor_cuota_base, primer_vencimiento, periodicidad, estado, pagare_firmado, motivo,
+          nombre_garantia, telefono_garantia, dni_garantia, cuil_garantia, domicilio_garantia,
+          observaciones, tipo_amortizacion,
           creado_por_id, creado_por_nombre)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'activo',$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'activo',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
       [id_cliente, moneda || 'ARS', monto_capital, tasa_interes_mensual, total_cuotas,
-        valor_cuota_base, primer_vencimiento, pagare_firmado || false, motivo || null,
-        nombre_garantia || null, telefono_garantia || null, dni_garantia || null, observaciones || null,
+        valor_cuota_base, primer_vencimiento, _periodicidad, pagare_firmado || false, motivo || null,
+        nombre_garantia || null, telefono_garantia || null, dni_garantia || null,
+        cuil_garantia || null, domicilio_garantia || null,
+        observaciones || null,
         tipoAmort, req.user?.id || null, req.user?.nombre || req.user?.username || null]
     );
     res.status(201).json(rows[0]);
@@ -70,7 +78,7 @@ router.get('/:id', async (req, res, next) => {
     if (prestamos.length === 0) return res.status(404).json({ error: 'Préstamo no encontrado' });
     const prestamo = prestamos[0];
     const { rows: pagos } = await pool.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_registro', [req.params.id]
     );
     const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagos);
     const tasa = parseFloat(prestamo.tasa_interes_mensual) / 100;
@@ -146,6 +154,38 @@ router.get('/:id/resumen', async (req, res, next) => {
     res.setHeader('Content-Disposition', `inline; filename="${nombreArchivo}"`);
     const doc = generarResumen(prestamo, pagos, saldo, interesProxMes);
     doc.pipe(res);
+  } catch (err) { next(err); }
+});
+
+// GET /api/prestamos/:id/contrato-mutuo — descarga DOCX del contrato mutuo
+router.get('/:id/contrato-mutuo', async (req, res, next) => {
+  try {
+    const { rows: prestamos } = await pool.query(
+      `SELECT p.*, c.nombre, c.apellido, c.dni, c.cuit, c.telefono, c.domicilio
+       FROM prestamos p JOIN clientes c ON c.id = p.id_cliente
+       WHERE p.id = $1`,
+      [req.params.id]
+    );
+    if (prestamos.length === 0) return res.status(404).json({ error: 'Préstamo no encontrado' });
+
+    const prestamo = prestamos[0];
+    const { rows: pagos } = await pool.query(
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_registro',
+      [req.params.id]
+    );
+
+    const { saldoCapitalActual } = require('../services/motorCuotas');
+    const { generarContratoMutuo } = require('../services/generadorContrato');
+
+    const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagos);
+    const interes = parseFloat((saldo * (parseFloat(prestamo.tasa_interes_mensual) / 100)).toFixed(2));
+
+    const nombreArchivo = `mutuo-prestamo-${prestamo.id}-${prestamo.apellido.toLowerCase()}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+
+    const buffer = await generarContratoMutuo(prestamo, pagos);
+    res.send(buffer);
   } catch (err) { next(err); }
 });
 

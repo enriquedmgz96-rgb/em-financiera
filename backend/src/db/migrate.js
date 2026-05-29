@@ -30,8 +30,10 @@ async function migrate() {
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
       await client.query('BEGIN');
       await client.query(sql);
+      // ON CONFLICT DO NOTHING permite que el SQL de la migración pueda
+      // auto-registrarse (con su propio INSERT) sin chocar con el wrapper.
       await client.query(
-        'INSERT INTO schema_migrations (version) VALUES ($1)',
+        'INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING',
         [version]
       );
       await client.query('COMMIT');

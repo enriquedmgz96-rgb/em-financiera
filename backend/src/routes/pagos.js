@@ -17,6 +17,10 @@ router.post('/', async (req, res, next) => {
   if (!TIPOS_VALIDOS.includes(tipo_pago)) {
     return res.status(400).json({ error: `tipo_pago debe ser: ${TIPOS_VALIDOS.join(', ')}` });
   }
+  const montoNum = parseFloat(monto_pagado);
+  if (!Number.isFinite(montoNum) || montoNum <= 0) {
+    return res.status(400).json({ error: 'monto_pagado debe ser un número mayor a 0' });
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -63,6 +67,33 @@ router.post('/', async (req, res, next) => {
         tipoAmortizacion,
         montoCapitalOriginal: parseFloat(prestamo.monto_capital),
       });
+
+      // VALIDACIONES DE NEGOCIO — solo para el pago recién insertado
+      if (pg.id === pagoInsertado.id) {
+        const interesPeriodo = resultado.interesPagado;
+        const cuotaCompleta  = cuotaBase + interesPeriodo;
+        const monto = parseFloat(pg.monto_pagado);
+        const tol = 1; // tolerancia $1 por redondeos
+        if (pg.tipo_pago === 'adelanto_parcial' && monto < interesPeriodo - tol) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `El monto pagado ($${monto.toFixed(2)}) es menor al interés del periodo ($${interesPeriodo.toFixed(2)}). Registrá el pago como "Solo interés" o aumentá el monto.`,
+          });
+        }
+        if (pg.tipo_pago === 'cuota_completa' && Math.abs(monto - cuotaCompleta) > tol) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `El monto ingresado ($${monto.toFixed(2)}) no coincide con la cuota completa ($${cuotaCompleta.toFixed(2)}). Usá "Adelanto parcial" si querés registrar un monto distinto.`,
+          });
+        }
+        if (pg.tipo_pago === 'solo_interes' && Math.abs(monto - interesPeriodo) > tol) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `El monto ingresado ($${monto.toFixed(2)}) no coincide con el interés del periodo ($${interesPeriodo.toFixed(2)}). Ajustá el monto o cambiá el tipo de pago.`,
+          });
+        }
+      }
+
       await client.query(
         `UPDATE pagos SET capital_amortizado=$1, interes_pagado=$2,
           saldo_capital_post_pago=$3, cuotas_restantes_post_pago=$4 WHERE id=$5`,
@@ -97,7 +128,7 @@ router.post('/', async (req, res, next) => {
 router.get('/:id_prestamo', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro_real, fecha_registro', [req.params.id_prestamo]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id_prestamo]
     );
     res.json(rows);
   } catch (err) { next(err); }

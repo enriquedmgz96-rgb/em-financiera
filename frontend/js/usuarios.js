@@ -32,8 +32,8 @@ async function renderUsuarios() {
         ${usuarios.map(u => `
           <tr>
             <td class="mono">${u.id}</td>
-            <td><strong>${u.username}</strong></td>
-            <td>${u.nombre_completo || '—'}</td>
+            <td><strong>${esc(u.username)}</strong></td>
+            <td>${esc(u.nombre_completo || '—')}</td>
             <td>
               ${u.activo
                 ? '<span class="badge badge-verde">Activo</span>'
@@ -67,7 +67,7 @@ async function renderUsuarioForm(id = null) {
     } catch (err) { if (err._auth) return; }
   }
 
-  const titulo = id ? `Editar usuario — ${usuario?.username || ''}` : 'Nuevo usuario';
+  const titulo = id ? `Editar usuario — ${esc(usuario?.username || '')}` : 'Nuevo usuario';
 
   app.innerHTML = `
     <div class="seccion-titulo">
@@ -78,12 +78,12 @@ async function renderUsuarioForm(id = null) {
     <form id="formUsuario">
       <div class="form-group">
         <label>Usuario *</label>
-        <input name="username" value="${usuario?.username || ''}" ${id ? 'readonly style="background:var(--bg);color:var(--ink-3)"' : 'required'} placeholder="Ej: kike" />
+        <input name="username" value="${esc(usuario?.username || '')}" ${id ? 'readonly style="background:var(--bg);color:var(--ink-3)"' : 'required'} placeholder="Ej: kike" />
         ${id ? '<small>El nombre de usuario no se puede cambiar.</small>' : ''}
       </div>
       <div class="form-group">
         <label>Nombre para mostrar</label>
-        <input name="nombre_completo" value="${usuario?.nombre_completo || ''}" placeholder="Ej: Melania" />
+        <input name="nombre_completo" value="${esc(usuario?.nombre_completo || '')}" placeholder="Ej: Melania" />
       </div>
       <div class="form-group">
         <label>${id ? 'Nueva contraseña' : 'Contraseña *'}</label>

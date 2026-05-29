@@ -3,3 +3,8 @@ node_modules/
 *.log
 .DS_Store
 .claude/
+
+# Carpetas de recuperación local (no versionar) y dumps con datos reales
+_backup_local_roto/
+_rescate_sesion_anterior/
+backups/

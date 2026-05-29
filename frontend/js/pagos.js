@@ -9,7 +9,7 @@ async function renderPagos() {
         <label>Préstamo activo</label>
         <select name="id_prestamo" required>
           <option value="">Seleccionar préstamo...</option>
-          ${prestamos.map(p => `<option value="${p.id}">#${p.id} — ${p.apellido}, ${p.nombre} | DNI ${p.dni}</option>`).join('')}
+          ${prestamos.map(p => `<option value="${p.id}">#${p.id} — ${esc(p.apellido)}, ${esc(p.nombre)} | DNI ${esc(p.dni)}</option>`).join('')}
         </select>
       </div>
       <button type="submit" class="btn-primary" style="margin:0">Cargar</button>
@@ -54,14 +54,14 @@ async function renderPagoForm(prestamoId) {
 
   app.innerHTML = `
     <div class="seccion-titulo">
-      <h2>Registrar pago — ${p.apellido}, ${p.nombre}</h2>
+      <h2>Registrar pago — ${esc(p.apellido)}, ${esc(p.nombre)}</h2>
       <button class="btn-secondary" onclick="renderPrestamoDetalle(${prestamoId})">← Volver</button>
     </div>
 
     <div style="background:${esUltimaCuota ? 'var(--gold-light)' : 'var(--verde-tint)'};border-left:3px solid ${esUltimaCuota ? 'var(--gold)' : 'var(--verde-mid)'};padding:.65rem 1rem;border-radius:var(--radius);margin-bottom:1.25rem;font-size:.875rem;color:var(--ink-2)">
       ${esUltimaCuota
         ? `<strong>Última cuota</strong> — El cliente adeuda menos de una cuota completa. El monto sugerido es el saldo total con intereses.`
-        : `Registrando <strong>cuota ${nroCuotaActual} de ${p.total_cuotas}</strong>`
+        : `Registrando <strong>${p.periodicidad === 'semanal' ? 'semana' : 'cuota'} ${nroCuotaActual} de ${p.total_cuotas}</strong>`
       }
     </div>
 
@@ -71,7 +71,7 @@ async function renderPagoForm(prestamoId) {
         <div class="value">$${fmt(saldo)}</div>
       </div>
       <div class="card">
-        <div class="label">Interés del mes</div>
+        <div class="label">Interés ${p.periodicidad === 'semanal' ? 'de la semana' : 'del mes'}</div>
         <div class="value">$${fmt(interes)}</div>
         <div style="font-size:.72rem;color:var(--ink-4);margin-top:.3rem">${p.tipo_amortizacion === 'flat' ? 'sobre capital original' : 'sobre saldo actual'}</div>
       </div>
@@ -96,7 +96,7 @@ async function renderPagoForm(prestamoId) {
       <div class="form-group">
         <label>Tipo de pago</label>
         <select name="tipo_pago" id="tipoPago">
-          <option value="cuota_completa">Cuota completa — $${fmt(cuotaCompleta)}</option>
+          <option value="cuota_completa">${p.periodicidad === 'semanal' ? 'Semana completa' : 'Cuota completa'} — $${fmt(cuotaCompleta)}</option>
           <option value="solo_interes">Solo interés — $${fmt(interes)}</option>
           <option value="adelanto_parcial">Monto libre (adelanto de capital)</option>
         </select>

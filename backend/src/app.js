@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+// Fail-fast: el JWT_SECRET es obligatorio. Sin él no arrancamos.
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+  console.error('FATAL: JWT_SECRET no configurado o demasiado corto (mín. 16 chars).');
+  console.error('Setealo en /opt/financiera/.env antes de arrancar el server.');
+  process.exit(1);
+}
+
 const express = require('express');
 const cors = require('cors');
 
@@ -12,7 +20,11 @@ const tasasRouter       = require('./routes/tasas');
 const mantenimientoRouter = require('./routes/mantenimiento');
 const categoriasRouter  = require('./routes/categorias');
 const usuariosRouter    = require('./routes/usuarios');
+const inversoresRouter    = require('./routes/inversores');
+const captacionesRouter   = require('./routes/captaciones');
+const devolucionesRouter  = require('./routes/devoluciones');
 const authMiddleware    = require('./middleware/authMiddleware');
+const adminOnly         = require('./middleware/adminOnly');
 
 const app = express();
 
@@ -33,11 +45,18 @@ app.use('/api/calcular',      calculadoraRouter);
 app.use('/api/tasas',         tasasRouter);
 app.use('/api/mantenimiento', mantenimientoRouter);
 app.use('/api/categorias',    categoriasRouter);
-app.use('/api/usuarios',      usuariosRouter);
+app.use('/api/usuarios',      adminOnly, usuariosRouter); // gating por admin
+// Módulo plata de terceros
+app.use('/api/inversores',    inversoresRouter);
+app.use('/api/captaciones',   captacionesRouter);
+app.use('/api/devoluciones',  devolucionesRouter);
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: err.message || 'Error interno del servidor' });
+  console.error('[' + new Date().toISOString() + ']', err.stack || err);
+  // No filtrar internals del backend al cliente
+  res.status(err.status || 500).json({
+    error: err.expose ? err.message : 'Error interno del servidor',
+  });
 });
 
 const PORT = process.env.PORT || 3001;
