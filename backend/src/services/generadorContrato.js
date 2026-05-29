@@ -290,4 +290,139 @@ async function generarContratoMutuo(prestamo) {
   return Packer.toBuffer(doc);
 }
 
-module.exports = { generarContratoMutuo };
+// Contrato de mutuo para una CAPTACIÓN. Roles invertidos respecto a un préstamo:
+// el INVERSOR es el ACREEDOR (entrega la plata) y EM Financiera (Enrique) es el
+// DEUDOR (la recibe y se obliga a devolverla con interés).
+async function generarContratoMutuoCaptacion(captacion) {
+  const fecha      = new Date(captacion.fecha_aporte);
+  const dia        = fecha.getDate();
+  const mes        = MESES[fecha.getMonth()];
+  const anio       = fecha.getFullYear();
+  const primerVcto = new Date(captacion.primer_vencimiento);
+  const fmtVcto    = `${String(primerVcto.getDate()).padStart(2,'0')}/${String(primerVcto.getMonth()+1).padStart(2,'0')}/${primerVcto.getFullYear()}`;
+
+  const capital    = parseFloat(captacion.monto_capital);
+  const tasa       = parseFloat(captacion.tasa_interes_mensual);
+  const cuotas     = parseInt(captacion.total_cuotas);
+  const cuotaBase  = capital / cuotas;
+  const interes    = capital * tasa / 100;
+  const cuotaTotal = cuotaBase + interes;
+  const periodo    = captacion.periodicidad === 'semanal' ? 'semanal' : 'mensual';
+  const periodoAdj = captacion.periodicidad === 'semanal' ? 'semanales' : 'mensuales';
+  const periodoSig = captacion.periodicidad === 'semanal' ? 'semanas subsiguientes' : 'meses subsiguientes';
+
+  const capitalLetras = numALetras(capital);
+  const cuotaLetras   = numALetras(Math.round(cuotaTotal));
+
+  // ACREEDOR = el inversor (entrega el dinero)
+  const acreedor = {
+    nombre:    `${captacion.apellido}, ${captacion.nombre}`,
+    dni:       captacion.dni,
+    cuit:      captacion.cuit || '—',
+    domicilio: captacion.domicilio || '—',
+  };
+  // DEUDOR = EM Financiera (recibe el dinero y debe devolverlo)
+  const deudor = ACREEDOR;
+
+  const children = [
+    p('CONTRATO DE MUTUO', { bold: true, center: true, size: 28, after: 240 }),
+
+    pMixed([
+      { text: `En ${deudor.localidad_corta}, Departamento San Justo, Provincia de Córdoba, a los ` },
+      { text: `${dia}`, bold: true },
+      { text: ` días del mes de ` },
+      { text: mes, bold: true },
+      { text: ` del año ` },
+      { text: String(anio), bold: true },
+      { text: `, entre el/la Sr/a. ` },
+      { text: acreedor.nombre, bold: true },
+      { text: `, DNI: ` },
+      { text: acreedor.dni, bold: true },
+      { text: `, CUIT: ` },
+      { text: acreedor.cuit, bold: true },
+      { text: `, con domicilio en ` },
+      { text: acreedor.domicilio, bold: true },
+      { text: `, por una parte y en adelante "El acreedor", y por la otra ` },
+      { text: deudor.nombre, bold: true },
+      { text: `, DNI: ` },
+      { text: deudor.dni, bold: true },
+      { text: `, con domicilio en calle ` },
+      { text: deudor.domicilio, bold: true },
+      { text: `, de la localidad de ` },
+      { text: deudor.localidad, bold: true },
+      { text: `, en adelante "el deudor", se conviene la celebración del presente CONTRATO DE MUTUO, que se regirá por las normas legales vigentes, y en especial por las cláusulas y condiciones siguientes:` },
+    ]),
+
+    pMixed([
+      { text: 'PRIMERO: ', bold: true, underline: true },
+      { text: `El acreedor entrega "al deudor", en este acto, en calidad de mutuo, la cantidad de ` },
+      { text: `PESOS ${capitalLetras.toUpperCase()} ($ ${fmtMonto(capital)})`, bold: true },
+      { text: `, quien lo recibe a entera conformidad y satisfacción, sirviendo la firma del presente de suficiente recibo y carta de adeudo en forma.` },
+    ]),
+
+    pMixed([
+      { text: 'SEGUNDO: ', bold: true, underline: true },
+      { text: `De común acuerdo entre acreedor y "el deudor" se conviene que el capital recibido y adeudado devengará, a cargo "del deudor", por la espera en la devolución, una tasa por servicio del ` },
+      { text: `${tasa}% efectivo ${periodo} directo`, bold: true },
+      { text: `.` },
+    ]),
+
+    pMixed([
+      { text: 'TERCERO: ', bold: true, underline: true },
+      { text: `"El deudor" se obliga y compromete a devolver y/o restituir al "acreedor", la suma recibida en calidad de mutuo, de la siguiente manera, a saber: en ` },
+      { text: `${cuotas} cuotas ${periodoAdj}`, bold: true },
+      { text: `, iguales y consecutivas de ` },
+      { text: `PESOS ${cuotaLetras.toUpperCase()} ($ ${fmtMonto(cuotaTotal)})`, bold: true },
+      { text: ` cada una, venciendo la primera el día ` },
+      { text: fmtVcto, bold: true },
+      { text: ` y las restantes en igual día de los ${periodoSig}. Cuando dicho/s vencimiento/s coincidieren con un día inhábil, la/s cuota/s deberá/n ser pagada/s el primer día hábil siguiente. Acuerdan expresamente las partes que la/s cuota/s estipulada/s incluye/n: capital y tasa por servicio.` },
+    ]),
+
+    pMixed([
+      { text: 'CUARTO: ', bold: true, underline: true },
+      { text: `El pago de la/s cuota/s pactada/s deberá efectuarse mediante transferencia a la cuenta que el "acreedor" indique, o en el domicilio que las partes acuerden.` },
+    ]),
+
+    pMixed([
+      { text: 'QUINTO: ', bold: true, underline: true },
+      { text: `La falta de pago en término de una cualquiera de las cuotas estipuladas hará incurrir "al deudor" en mora automática, de pleno derecho y sin necesidad de interpelación previa, produciéndose la caducidad total de todos los términos otorgados.` },
+    ]),
+
+    pMixed([
+      { text: 'SEXTO: ', bold: true, underline: true },
+      { text: `Para todos los efectos contractuales, legales y judiciales emergentes del presente contrato, las partes fijan domicilio en los denunciados precedentemente, acordando voluntariamente someterse en caso de litigio judicial a la jurisdicción ordinaria de los Tribunales de la ciudad de ` },
+      { text: 'Arroyito', bold: true },
+      { text: `, renunciando al fuero Federal y a todo otro que pudiere corresponderles.` },
+    ]),
+
+    p(`Para su constancia, y fiel cumplimiento, previa lectura y ratificación de todos sus términos, se firma el presente en sendos ejemplares de un mismo tenor y solo efecto en lugar y fecha arriba indicados.`, { after: 320 }),
+
+    p(`ARROYITO (Pcia. de Córdoba), ${dia} de ${mes} de ${anio}.`, { center: true, bold: true, after: 480 }),
+
+    pMixed([
+      { text: '______________________________          ______________________________' },
+    ], { center: true, after: 80 }),
+    pMixed([
+      { text: `      ACREEDOR: ${acreedor.nombre}          DEUDOR: ${deudor.nombre}` },
+    ], { center: true, after: 80 }),
+    pMixed([
+      { text: `      DNI: ${acreedor.dni}                               DNI: ${deudor.dni}` },
+    ], { center: true, after: 480 }),
+  ];
+
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838 },
+          margin: { top: 1134, bottom: 1134, left: 1418, right: 1134 },
+        }
+      },
+      children,
+    }]
+  });
+
+  return Packer.toBuffer(doc);
+}
+
+module.exports = { generarContratoMutuo, generarContratoMutuoCaptacion };

@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
 const { calcularPago, saldoCapitalActual } = require('../services/motorCuotas');
+const { generarReciboDevolucion } = require('../services/generadorPDF');
 
 const TIPOS_VALIDOS = ['cuota_completa', 'solo_interes', 'adelanto_parcial'];
 
@@ -194,6 +195,26 @@ router.delete('/:id', async (req, res, next) => {
   } finally {
     client.release();
   }
+});
+
+// GET /api/devoluciones/:id/recibo — PDF del recibo de devolución
+router.get('/:id/recibo', async (req, res, next) => {
+  try {
+    const { rows: devs } = await pool.query('SELECT * FROM devoluciones WHERE id = $1', [req.params.id]);
+    if (devs.length === 0) return res.status(404).json({ error: 'Devolución no encontrada' });
+    const dev = devs[0];
+    const { rows: caps } = await pool.query(
+      `SELECT c.*, i.nombre, i.apellido, i.dni
+       FROM captaciones c JOIN inversores i ON i.id = c.id_inversor WHERE c.id = $1`,
+      [dev.id_captacion]
+    );
+    if (caps.length === 0) return res.status(404).json({ error: 'Captación no encontrada' });
+    const nombreArchivo = `recibo-devolucion-${dev.id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${nombreArchivo}"`);
+    const doc = generarReciboDevolucion(dev, caps[0]);
+    doc.pipe(res);
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

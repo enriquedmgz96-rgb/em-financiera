@@ -61,8 +61,9 @@ function renderManual() {
       <a href="#sec-categorias">8. Categorías de tasa</a>
       <a href="#sec-uif">9. Documentación UIF</a>
       <a href="#sec-dashboard">10. Métricas del dashboard</a>
-      <a href="#sec-faq">11. FAQ</a>
-      <a href="#sec-glosario">12. Glosario</a>
+      <a href="#sec-terceros">11. Plata de terceros</a>
+      <a href="#sec-faq">12. FAQ</a>
+      <a href="#sec-glosario">13. Glosario</a>
     </nav>
 
     <!-- 1. Intro -->
@@ -258,9 +259,73 @@ function renderManual() {
       <div class="manual-ejemplo"><strong>Ecuación clave:</strong> <code>Recuperado + Pendiente = Cartera</code>. Si no cuadra, es un bug. Reportalo.</div>
     </section>
 
-    <!-- 11. FAQ -->
+    <!-- 11. Plata de terceros -->
+    <section id="sec-terceros" class="manual-section">
+      <h3>11. Plata de terceros (inversores)</h3>
+      <p>Además de prestar plata propia, la financiera <strong>recibe capital de inversores</strong> y se lo
+        devuelve con interés. Es el espejo exacto de un préstamo, pero con los roles invertidos:
+        acá <strong>la financiera es la deudora</strong> y el inversor es el acreedor.</p>
+
+      <div class="manual-warn"><strong>Préstamo vs. Captación.</strong> En un <em>préstamo</em> la financiera
+        presta y cobra (es acreedora). En una <em>captación</em> la financiera recibe y devuelve (es deudora).
+        Por eso la pantalla y los contratos hablan de "devolución" y no de "cobro".</p>
+
+      <h4>El flujo, paso a paso</h4>
+      <ol>
+        <li><strong>Alta de inversor</strong> (Inversores → + Nuevo inversor). Nombre, DNI, CUIT, domicilio y
+          datos bancarios (CBU/alias) para transferirle las devoluciones.</li>
+        <li><strong>Alta de captación</strong> (Captaciones → + Nueva captación). Elegís el inversor, el capital
+          aportado, la tasa que le pagás, la cantidad de cuotas, la periodicidad y el tipo de amortización.</li>
+        <li><strong>Registro de devoluciones</strong>. Cada vez que le pagás al inversor, registrás una devolución.
+          El sistema amortiza capital y/o paga interés y baja el saldo a devolver — igual que un pago, pero al revés.</li>
+      </ol>
+
+      <h4>Diccionario rápido (préstamo → captación)</h4>
+      <table class="manual-table">
+        <thead><tr><th>En préstamos</th><th>En captaciones</th><th>Qué es</th></tr></thead>
+        <tbody>
+          <tr><td>Cliente</td><td><strong>Inversor</strong></td><td>La contraparte. Acá es quien pone la plata.</td></tr>
+          <tr><td>Préstamo</td><td><strong>Captación</strong></td><td>El capital recibido a devolver con interés.</td></tr>
+          <tr><td>Pago</td><td><strong>Devolución</strong></td><td>Cada entrega de plata al inversor.</td></tr>
+          <tr><td>Recibo de pago</td><td><strong>Recibo de devolución</strong></td><td>Comprobante PDF que firma el inversor al recibir.</td></tr>
+          <tr><td>Saldo del cliente</td><td><strong>Saldo a devolver</strong></td><td>Capital que todavía le debés al inversor.</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Tipos de devolución</h4>
+      <p>Funcionan igual que los tipos de pago (sección 6): <strong>Cuota completa</strong> (capital + interés del
+        periodo), <strong>Solo interés</strong> (le pagás el rendimiento del mes y el capital queda intacto) y
+        <strong>Adelanto parcial</strong> (cualquier otro monto; el excedente sobre el interés reduce el saldo).</p>
+      <div class="manual-ejemplo"><strong>Ejemplo:</strong> Un inversor aporta $1.000.000 a 12 meses al 5% mensual,
+        amortización clásica. Le devolvés cada mes $83.333 de capital + $50.000 de interés = $133.333. Si un mes solo
+        le pagás el interés ($50.000), el capital sigue en $1.000.000 y al mes siguiente se vuelve a generar interés.</div>
+
+      <h4>Documentos que genera</h4>
+      <ul>
+        <li><strong>Contrato de mutuo</strong> (DOCX): se descarga desde el detalle de la captación. Es un mutuo
+          privado individual donde el inversor figura como acreedor y la financiera como deudora.</li>
+        <li><strong>Recibo de devolución</strong> (PDF): se descarga desde cada devolución en el historial. Tiene
+          dos copias (financiera e inversor) y una línea de firma para el inversor.</li>
+      </ul>
+
+      <h4>Estados de una captación</h4>
+      <table class="manual-table">
+        <thead><tr><th>Estado</th><th>Significado</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-verde">Activa</span></td><td>Vigente, todavía le debés capital al inversor.</td></tr>
+          <tr><td><span class="badge badge-verde">Devuelta</span></td><td>El saldo a devolver llegó a $0. Captación cerrada.</td></tr>
+          <tr><td><span class="badge" style="background:#f0f0f0;color:#888">Archivada</span></td><td>Oculta de la lista principal.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="manual-warn"><strong>Cuidado con confundir las dos puntas.</strong> La plata que captás de un
+        inversor (pasivo, la devolvés) no es lo mismo que la plata que prestás a un cliente (activo, la cobrás).
+        El reporte de balance separa una de la otra.</div>
+    </section>
+
+    <!-- 12. FAQ -->
     <section id="sec-faq" class="manual-section">
-      <h3>11. FAQ — Preguntas frecuentes</h3>
+      <h3>12. FAQ — Preguntas frecuentes</h3>
 
       <h4>¿Por qué no puedo borrar un cliente?</h4>
       <p>Para mantener trazabilidad. Si un cliente ya no opera, dejalo así o agregale una observación. Sus préstamos quedan en el historial.</p>
@@ -289,7 +354,7 @@ function renderManual() {
 
     <!-- 12. Glosario -->
     <section id="sec-glosario" class="manual-section">
-      <h3>12. Glosario</h3>
+      <h3>13. Glosario</h3>
       <dl style="font-size: .9rem; line-height: 1.6;">
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Amortización</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Reducción del capital adeudado por un pago. No incluye intereses.</dd>
@@ -297,11 +362,17 @@ function renderManual() {
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Capital</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Monto original prestado, sin contar intereses.</dd>
 
+        <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Captación</dt>
+        <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Capital recibido de un inversor que la financiera debe devolver con interés. Espejo de un préstamo, con la financiera como deudora.</dd>
+
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">CUIT / CUIL</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Clave Única de Identificación Tributaria (Laboral). Validado con dígito verificador.</dd>
 
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Cuota base</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Capital ÷ Total de cuotas. La parte fija de capital que se amortiza cada periodo.</dd>
+
+        <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Devolución</dt>
+        <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Cada pago que la financiera le hace a un inversor por una captación. Equivale al "pago" de un préstamo.</dd>
 
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Garante</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Persona que respalda el pago del préstamo. Sus datos (nombre, DNI, CUIL, domicilio) son obligatorios.</dd>
@@ -309,11 +380,17 @@ function renderManual() {
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Interés</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Costo del préstamo expresado como % del capital o saldo.</dd>
 
+        <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Inversor</dt>
+        <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Tercero que aporta capital a la financiera. Es el acreedor de una captación: pone la plata y se le devuelve con interés.</dd>
+
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Legajo</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Identificador único de un cliente (C-0001) o préstamo (P-0001).</dd>
 
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Mora</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Estado de un préstamo cuyo próximo vencimiento ya pasó sin pago registrado.</dd>
+
+        <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">Mutuo</dt>
+        <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Contrato de préstamo de dinero entre privados. En una captación el inversor (acreedor) le presta a la financiera (deudora).</dd>
 
         <dt style="font-weight: 700; color: var(--ink, #1b4332); margin-top: .5rem">PMT</dt>
         <dd style="margin-left: 1.2rem; color: var(--ink-2, #4a4a4a)">Fórmula para calcular la cuota fija en el sistema francés.</dd>

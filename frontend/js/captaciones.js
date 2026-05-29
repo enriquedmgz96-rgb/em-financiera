@@ -132,13 +132,17 @@ async function renderCaptacionDetalle(id) {
             <td>$${fmt(d.interes_pagado)}</td>
             <td>$${fmt(d.saldo_capital_post_pago)}</td>
             <td style="font-size:.8rem;color:#888">${esc(d.creado_por_nombre || '-')}</td>
-            <td><button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem;color:var(--rojo)" onclick="eliminarDevolucion(${d.id}, ${c.id})">✕</button></td>
+            <td>
+              <button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem" onclick="descargarPDF('/api/devoluciones/${d.id}/recibo','recibo-devolucion-${d.id}.pdf')">PDF</button>
+              <button class="btn-secondary" style="margin:0;padding:.3rem .7rem;font-size:.8rem;color:var(--rojo)" onclick="eliminarDevolucion(${d.id}, ${c.id})">✕</button>
+            </td>
           </tr>`).join('')}
       </tbody>
     </table>`}
 
     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
       ${c.estado !== 'archivada' ? `<button class="btn-primary" onclick="renderDevolucionForm(${c.id})">Registrar devolución</button>` : ''}
+      <button class="btn-secondary" onclick="descargarPDF('/api/captaciones/${c.id}/contrato-mutuo','mutuo-captacion-${c.id}.docx')">Descargar contrato de mutuo</button>
       ${c.estado === 'archivada'
         ? `<button class="btn-secondary" style="color:var(--verde-mid)" onclick="desarchivarCaptacion(${c.id})">Desarchivar</button>`
         : `<button class="btn-secondary" style="color:#888;margin-left:auto" onclick="archivarCaptacion(${c.id})">Archivar</button>`

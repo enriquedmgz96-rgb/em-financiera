@@ -153,6 +153,7 @@
     <span class="brand">EM <span>Financiera</span></span>
     <div class="nav-links" id="navLinks">
       <a href="#" data-page="dashboard" class="active">Dashboard</a>
+      <a href="#" data-page="balance">Balance</a>
       <a href="#" data-page="clientes">Clientes</a>
       <a href="#" data-page="prestamos">Préstamos</a>
       <a href="#" data-page="pagos">Pago</a>
@@ -171,6 +172,7 @@
   <!-- Mobile menu drawer -->
   <div class="nav-drawer" id="navDrawer">
     <a href="#" data-page="dashboard">Dashboard</a>
+    <a href="#" data-page="balance">Balance</a>
     <a href="#" data-page="clientes">Clientes</a>
     <a href="#" data-page="prestamos">Préstamos</a>
     <a href="#" data-page="pagos">Registrar Pago</a>
@@ -188,6 +190,7 @@
 
   <script src="/js/api.js?v=6"></script>
   <script src="/js/dashboard.js?v=6"></script>
+  <script src="/js/balance.js?v=6"></script>
   <script src="/js/clientes.js?v=6"></script>
   <script src="/js/prestamos.js?v=6"></script>
   <script src="/js/pagos.js?v=6"></script>
@@ -267,6 +270,7 @@
     // ── Navegación ────────────────────────────────────────────
     const pages = {
       dashboard:    renderDashboard,
+      balance:      renderBalance,
       clientes:     renderClientes,
       prestamos:    renderPrestamos,
       pagos:        renderPagos,

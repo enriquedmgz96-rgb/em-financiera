@@ -114,4 +114,26 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/captaciones/:id/contrato-mutuo — descarga DOCX del contrato de mutuo
+router.get('/:id/contrato-mutuo', async (req, res, next) => {
+  try {
+    const { rows: caps } = await pool.query(
+      `SELECT c.*, i.nombre, i.apellido, i.dni, i.cuit, i.domicilio
+       FROM captaciones c JOIN inversores i ON i.id = c.id_inversor
+       WHERE c.id = $1`,
+      [req.params.id]
+    );
+    if (caps.length === 0) return res.status(404).json({ error: 'Captación no encontrada' });
+    const captacion = caps[0];
+
+    const { generarContratoMutuoCaptacion } = require('../services/generadorContrato');
+    const nombreArchivo = `mutuo-captacion-${captacion.id}-${String(captacion.apellido || '').toLowerCase()}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+
+    const buffer = await generarContratoMutuoCaptacion(captacion);
+    res.send(buffer);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

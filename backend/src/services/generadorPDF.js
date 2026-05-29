@@ -165,6 +165,69 @@ function _escribirRecibo(doc, pago, p, startY, titulo) {
   doc.font('Helvetica').fontSize(7.5).fillColor('#000').text('Firma, aclaración y DNI del prestamista', col2, firmaY + 3);
 }
 
+// Etiqueta del tipo de devolución (espejo de _labelTipoPago, para captaciones).
+function _labelTipoDevolucion(dev, captacion) {
+  const tipo = dev.tipo_pago;
+  if (tipo === 'cuota_completa') return 'Cuota completa';
+  if (tipo === 'solo_interes')   return 'Solo interés';
+  const cuotaBase = parseFloat(captacion.valor_cuota_base || 0);
+  const cuotaEsperada = cuotaBase + parseFloat(dev.interes_pagado || 0);
+  const monto = parseFloat(dev.monto_pagado || 0);
+  const tol = 0.5;
+  if (monto > cuotaEsperada + tol) return 'Adelanto parcial';
+  if (monto < cuotaEsperada - tol) return 'Pago parcial';
+  return 'Cuota completa';
+}
+
+// Recibo de devolución — espejo del recibo de pago, pero la financiera DEVUELVE
+// plata al inversor. Por eso firma el inversor (constancia de haber recibido).
+function generarReciboDevolucion(devolucion, captacion) {
+  const doc = new PDFDocument({ size: 'A4', margins: { top: 20, bottom: 20, left: 40, right: 40 } });
+  const midY = doc.page.height / 2;
+  _escribirReciboDevolucion(doc, devolucion, captacion, 20, 'COPIA FINANCIERA');
+  doc.moveTo(40, midY).lineTo(doc.page.width - 40, midY).dash(4, { space: 4 }).stroke('#999');
+  doc.undash();
+  doc.font('Helvetica').fontSize(7).fillColor('#999').text('✂ cortar aquí', 0, midY - 9, { align: 'center' });
+  _escribirReciboDevolucion(doc, devolucion, captacion, midY + 12, 'COPIA INVERSOR');
+  doc.end();
+  return doc;
+}
+
+function _escribirReciboDevolucion(doc, dev, c, startY, titulo) {
+  const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  const fechaPago = _fmtFecha(dev.fecha_pago_real);
+  const col1 = 40, col2 = 310;
+
+  doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
+    .text(`RECIBO DE DEVOLUCIÓN — ${FINANCIERA}`, 40, startY, { align: 'center' });
+  doc.font('Helvetica').fontSize(8).fillColor('#555')
+    .text(`${FINANCIERA_CUIT}   |   ${titulo}`, 40, startY + 16, { align: 'center' });
+  doc.moveTo(40, startY + 28).lineTo(doc.page.width - 40, startY + 28).lineWidth(0.5).stroke('#000');
+
+  let y = startY + 35;
+  doc.font('Helvetica').fontSize(9.5).fillColor('#000');
+  doc.text(`Inversor: ${c.apellido}, ${c.nombre}`, col1, y); doc.text(`Recibo N°: ${dev.id}`, col2, y); y += 14;
+  doc.text(`DNI: ${c.dni}`, col1, y); doc.text(`Fecha de devolución: ${fechaPago}`, col2, y); y += 14;
+  doc.text(`Captación N°: ${c.id}`, col1, y); doc.text(`Saldo a devolver post-pago: $${fmt(dev.saldo_capital_post_pago)}`, col2, y); y += 18;
+
+  doc.rect(col1, y, doc.page.width - 80, 38).fill('#eef3fb').stroke('#2980b9');
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(10)
+    .text(`MONTO DEVUELTO: $${fmt(dev.monto_pagado)} ${c.moneda}`, col1 + 10, y + 5);
+  doc.font('Helvetica').fontSize(8.5)
+    .text(`Tipo: ${_labelTipoDevolucion(dev, c)}   |   Forma: ${dev.forma_pago || 'transferencia'}   |   Capital devuelto: $${fmt(dev.capital_amortizado)}   |   Interés: $${fmt(dev.interes_pagado)}`, col1 + 10, y + 20);
+  y += 50;
+
+  if (dev.observaciones) {
+    doc.font('Helvetica').fontSize(8).fillColor('#555').text(`Observaciones: ${dev.observaciones}`, col1, y);
+    y += 14;
+  }
+
+  const firmaY = startY + (doc.page.height / 2) - 55;
+  doc.font('Helvetica').fontSize(7.5).fillColor('#333').text('El inversor declara haber recibido el monto detallado en este recibo.', col1, firmaY - 14);
+  doc.moveTo(col2, firmaY).lineTo(col2 + 160, firmaY).lineWidth(0.5).stroke('#000');
+  doc.font('Helvetica').fontSize(7.5).fillColor('#000').text('Firma, aclaración y DNI del inversor', col2, firmaY + 3);
+}
+
 function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
   const doc = new PDFDocument({ size: 'A4', margins: { top: 40, bottom: 40, left: 40, right: 40 } });
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
@@ -308,4 +371,4 @@ function generarResumen(prestamo, pagos, saldoActual, interesProxMes) {
   return doc;
 }
 
-module.exports = { generarContrato, generarRecibo, generarResumen };
+module.exports = { generarContrato, generarRecibo, generarResumen, generarReciboDevolucion };

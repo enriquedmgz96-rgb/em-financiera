@@ -171,4 +171,91 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/dashboard/balance — balance consolidado Activo (a cobrar) vs Pasivo (a devolver) + tendencia
+router.get('/balance', async (req, res, next) => {
+  try {
+    const VIVOS = "estado NOT IN ('cancelado','archivado')";
+    const VIVAS = "estado NOT IN ('devuelta','archivada')";
+
+    // ACTIVO: capital pendiente de cobrar a clientes (préstamos vivos)
+    const { rows: [activo] } = await pool.query(`
+      SELECT
+        COALESCE(SUM(p.monto_capital),0)                                  AS capital_prestado,
+        COALESCE(SUM(p.monto_capital - COALESCE(amort.total,0)),0)        AS a_cobrar,
+        COUNT(*)                                                          AS operaciones
+      FROM prestamos p
+      LEFT JOIN (
+        SELECT id_prestamo, SUM(capital_amortizado) AS total FROM pagos GROUP BY id_prestamo
+      ) amort ON amort.id_prestamo = p.id
+      WHERE p.${VIVOS}
+    `);
+
+    // PASIVO: capital pendiente de devolver a inversores (captaciones vivas)
+    const { rows: [pasivo] } = await pool.query(`
+      SELECT
+        COALESCE(SUM(c.monto_capital),0)                                  AS capital_captado,
+        COALESCE(SUM(c.monto_capital - COALESCE(dev.total,0)),0)          AS a_devolver,
+        COUNT(*)                                                          AS operaciones
+      FROM captaciones c
+      LEFT JOIN (
+        SELECT id_captacion, SUM(capital_amortizado) AS total FROM devoluciones GROUP BY id_captacion
+      ) dev ON dev.id_captacion = c.id
+      WHERE c.${VIVAS}
+    `);
+
+    // TENDENCIA: últimos 6 meses de intereses cobrados vs pagados (spread mensual)
+    const { rows: tendencia } = await pool.query(`
+      WITH meses AS (
+        SELECT to_char(d, 'YYYY-MM') AS ym
+        FROM generate_series(
+          date_trunc('month', CURRENT_DATE) - INTERVAL '5 months',
+          date_trunc('month', CURRENT_DATE),
+          INTERVAL '1 month'
+        ) d
+      ),
+      cob AS (
+        SELECT to_char(date_trunc('month', fecha_pago_real), 'YYYY-MM') AS ym,
+               SUM(interes_pagado) AS interes, SUM(capital_amortizado) AS capital
+        FROM pagos GROUP BY 1
+      ),
+      pag AS (
+        SELECT to_char(date_trunc('month', fecha_pago_real), 'YYYY-MM') AS ym,
+               SUM(interes_pagado) AS interes, SUM(capital_amortizado) AS capital
+        FROM devoluciones GROUP BY 1
+      )
+      SELECT m.ym                                                        AS mes,
+             COALESCE(cob.interes,0)::float                              AS intereses_cobrados,
+             COALESCE(pag.interes,0)::float                              AS intereses_pagados,
+             (COALESCE(cob.interes,0) - COALESCE(pag.interes,0))::float  AS spread,
+             COALESCE(cob.capital,0)::float                              AS capital_cobrado,
+             COALESCE(pag.capital,0)::float                              AS capital_devuelto
+      FROM meses m
+      LEFT JOIN cob ON cob.ym = m.ym
+      LEFT JOIN pag ON pag.ym = m.ym
+      ORDER BY m.ym
+    `);
+
+    const aCobrar   = parseFloat(activo.a_cobrar);
+    const aDevolver = parseFloat(pasivo.a_devolver);
+    const posicionNeta = parseFloat((aCobrar - aDevolver).toFixed(2));
+    const cobertura = aDevolver > 0 ? parseFloat((aCobrar / aDevolver).toFixed(4)) : null;
+
+    res.json({
+      activo: {
+        capital_prestado: parseFloat(activo.capital_prestado),
+        a_cobrar: aCobrar,
+        operaciones: parseInt(activo.operaciones),
+      },
+      pasivo: {
+        capital_captado: parseFloat(pasivo.capital_captado),
+        a_devolver: aDevolver,
+        operaciones: parseInt(pasivo.operaciones),
+      },
+      posicion_neta: posicionNeta,
+      cobertura,
+      tendencia,
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
