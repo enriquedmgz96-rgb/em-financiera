@@ -14,14 +14,25 @@ async function renderSimulador() {
   app.innerHTML = `
     <h2>Tasas & Simulador</h2>
 
+    <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+      <button id="modoPrestamo" onclick="simCambiarModo('prestamo')"
+        style="flex:1;padding:.6rem;border:2px solid #1b4332;background:#1b4332;color:white;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">
+        Préstamo &middot; lo que cobrás a un cliente
+      </button>
+      <button id="modoCaptacion" onclick="simCambiarModo('captacion')"
+        style="flex:1;padding:.6rem;border:2px solid #2980b9;background:white;color:#2980b9;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">
+        Captación &middot; lo que devolvés a un inversor
+      </button>
+    </div>
+
     <div style="background:white;padding:1.2rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1.5rem">
       <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
         <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-          <label>Nombre del cliente (opcional)</label>
+          <label id="lblNombreSim">Nombre del cliente (opcional)</label>
           <input type="text" id="nombreSim" placeholder="Ej: Juan Pérez" />
         </div>
         <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-          <label>Monto a prestar</label>
+          <label id="lblMontoSim">Monto a prestar</label>
           <input type="text" id="montoSim" placeholder="Ej: $ 1.100.000" style="font-size:1.1rem;font-weight:600" />
         </div>
       </div>
@@ -154,6 +165,28 @@ async function renderSimulador() {
     if (raw) simular(parseInt(raw), tasaSeleccionada, window._sistemaSimulador, isSem);
   };
 
+  // Modo: préstamo (lo que cobrás a un cliente) vs captación (lo que devolvés a un inversor)
+  window._simModo = 'prestamo';
+  window.simCambiarModo = (modo) => {
+    window._simModo = modo;
+    const esCapt = modo === 'captacion';
+    const bP = document.getElementById('modoPrestamo');
+    const bC = document.getElementById('modoCaptacion');
+    if (bP) { bP.style.background = esCapt ? 'white' : '#1b4332'; bP.style.color = esCapt ? '#1b4332' : 'white'; }
+    if (bC) { bC.style.background = esCapt ? '#2980b9' : 'white'; bC.style.color = esCapt ? 'white' : '#2980b9'; }
+
+    const lblN = document.getElementById('lblNombreSim');
+    const lblM = document.getElementById('lblMontoSim');
+    const inpN = document.getElementById('nombreSim');
+    const inpM = document.getElementById('montoSim');
+    if (lblN) lblN.textContent = esCapt ? 'Nombre del inversor (opcional)' : 'Nombre del cliente (opcional)';
+    if (lblM) lblM.textContent = esCapt ? 'Capital que aporta el inversor' : 'Monto a prestar';
+    if (inpN) inpN.placeholder = esCapt ? 'Ej: María Gómez' : 'Ej: Juan Pérez';
+
+    const raw = inpM ? inpM.value.replace(/\D/g, '') : '';
+    if (raw) simular(parseInt(raw), tasaSeleccionada, window._sistemaSimulador, _simPeriodicidad === 'semanal');
+  };
+
   document.getElementById('montoSim').addEventListener('input', e => {
     const raw = e.target.value.replace(/\D/g, '');
     e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
@@ -171,15 +204,13 @@ function simular(monto, tasaMensual, sistema = 'flat', isSemanal = false) {
   const contenedor = document.getElementById('tablaSim');
   if (!monto || monto <= 0) { contenedor.innerHTML = ''; return; }
 
+  const esCapt = (window._simModo || 'prestamo') === 'captacion';
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 });
   const cuotas = isSemanal ? [1,2,3,4,5,6,7,8,9,10,11,12] : [1,2,3,4,5,6,7,8,9,10,11,12,18];
-  const unidad = isSemanal ? 'semana' : 'cuota';
-  const unidadPlural = isSemanal ? 'semanas' : 'cuotas';
 
   const filas = cuotas.map(n => {
-    let precioCuota, totalFinanciado, tasaTotal;
+    let precioCuota, totalFinanciado;
     const r = tasaMensual / 100;
-    tasaTotal = tasaMensual * n;
 
     if (sistema === 'flat') {
       // Interés fijo sobre capital original: (capital/n) + capital×tasa
@@ -190,42 +221,47 @@ function simular(monto, tasaMensual, sistema = 'flat', isSemanal = false) {
       precioCuota = calcPMT(monto, tasaMensual, n);
       totalFinanciado = precioCuota * n;
     } else {
-      // Alemán: primer mes (el más caro), interés sobre saldo
-      precioCuota = (monto / n) + monto * r; // = mismo que flat para mes 1
-      totalFinanciado = monto / n * n + monto * r * n * (n + 1) / 2 / n; // aprox. total intereses
-      // Total real = suma de todas las cuotas decrecientes
+      // Decreciente (alemán): capital constante, interés sobre saldo
       let totalReal = 0, saldo = monto;
       for (let i = 1; i <= n; i++) {
         totalReal += (monto / n) + saldo * r;
         saldo -= monto / n;
       }
+      precioCuota = (monto / n) + monto * r; // primera cuota (la más alta)
       totalFinanciado = totalReal;
     }
-    return { n, tasaTotal, totalFinanciado, precioCuota };
+    return { n, totalFinanciado, precioCuota, retorno: totalFinanciado - monto };
   });
 
-  const labels = { flat: 'Clásico — Interés plano', frances: 'Francés — PMT', aleman: 'Decreciente — 1ª cuota' };
-  const colHeader = isSemanal
+  const colHeaderPrest = isSemanal
     ? { flat: 'Cuota semanal (fija)', frances: 'Cuota semanal (fija)', aleman: '1ª cuota (decrece)' }
     : { flat: 'Cuota mensual (fija)', frances: 'Cuota mensual (fija)', aleman: '1ª cuota (decrece)' };
 
+  const thPlazo = esCapt ? (isSemanal ? 'Semanas' : 'Meses') : (isSemanal ? 'Semanas' : 'Cuotas');
+  const thTasa = isSemanal ? 'Tasa semanal' : 'Tasa mensual';
+  const thCuota = esCapt ? (isSemanal ? 'Devolución semanal' : 'Devolución mensual') : (colHeaderPrest[sistema] || 'Cuota');
+  const thTotal = esCapt ? 'Total a devolver' : 'Total a pagar';
+  const unidadFila = n => isSemanal ? (n === 1 ? 'semana' : 'semanas') : (esCapt ? (n === 1 ? 'mes' : 'meses') : (n === 1 ? 'cuota' : 'cuotas'));
+
   contenedor.innerHTML = `
+    ${esCapt ? '<p style="margin:0 0 .6rem;color:#2980b9;font-size:.88rem;font-weight:600">Cuánto le devolvés al inversor según el plazo. El <strong>retorno</strong> es su ganancia (el interés que cobra).</p>' : ''}
     <table>
       <thead>
-        <tr><th>${isSemanal ? 'Semanas' : 'Cuotas'}</th><th>${isSemanal ? 'Tasa semanal' : 'Tasa mensual'}</th><th>${colHeader[sistema] || 'Cuota'}</th><th>Total a pagar</th></tr>
+        <tr><th>${thPlazo}</th><th>${thTasa}</th><th>${thCuota}</th><th>${thTotal}</th>${esCapt ? '<th>Retorno (interés)</th>' : ''}</tr>
       </thead>
       <tbody>
         ${filas.map(f => `
           <tr>
-            <td><strong>${f.n} ${isSemanal ? (f.n === 1 ? 'semana' : 'semanas') : (f.n === 1 ? 'cuota' : 'cuotas')}</strong></td>
+            <td><strong>${f.n} ${unidadFila(f.n)}</strong></td>
             <td>${parseFloat(tasaMensual)}%</td>
             <td>$ ${fmt(f.precioCuota)}</td>
             <td>$ ${fmt(f.totalFinanciado)}</td>
+            ${esCapt ? `<td style="color:#1b7a3d;font-weight:700">$ ${fmt(f.retorno)}</td>` : ''}
           </tr>`).join('')}
       </tbody>
     </table>
     <div style="margin-top:1rem">
-      <button class="btn-primary" onclick="generarPresupuesto(${monto}, ${tasaMensual}, '${sistema}', ${isSemanal})">Generar presupuesto</button>
+      <button class="btn-primary" onclick="generarPresupuesto(${monto}, ${tasaMensual}, '${sistema}', ${isSemanal})">${esCapt ? 'Generar proyección para el inversor' : 'Generar presupuesto'}</button>
     </div>
   `;
 }
@@ -265,7 +301,8 @@ async function eliminarCategoria(id) {
 }
 
 function generarPresupuesto(monto, tasaMensual, sistema = 'flat', isSemanal = false) {
-  const nombre = document.getElementById('nombreSim').value.trim() || 'Cliente';
+  const esCapt = (window._simModo || 'prestamo') === 'captacion';
+  const nombre = document.getElementById('nombreSim').value.trim() || (esCapt ? 'Inversor' : 'Cliente');
   const fmt = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 });
   const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const cuotas = isSemanal ? [1,2,3,4,5,6,7,8,9,10,11,12] : [1,2,3,4,5,6,7,8,9,10,11,12,18];
@@ -286,29 +323,43 @@ function generarPresupuesto(monto, tasaMensual, sistema = 'flat', isSemanal = fa
       precioCuota = (monto / n) + monto * r;
       totalFinanciado = precioCuota * n;
     }
-    return { n, tasaTotal: tasaMensual * n, totalFinanciado, precioCuota };
+    return { n, totalFinanciado, precioCuota, retorno: totalFinanciado - monto };
   });
 
-  const colCuota = sistema === 'aleman' ? '1ª cuota' : (isSemanal ? 'Cuota semanal' : 'Cuota mensual');
+  const accent = esCapt ? '#2980b9' : '#1b4332';
+  const accentBg = esCapt ? '#eef6fc' : '#f0faf2';
+  const accentBorder = esCapt ? '#dbeefb' : '#e8f5e9';
+  const accentRow = esCapt ? '#f5fafd' : '#f8fdf9';
+  const colCuotaPrest = sistema === 'aleman' ? '1ª cuota' : (isSemanal ? 'Cuota semanal' : 'Cuota mensual');
+  const thPlazo = esCapt ? (isSemanal ? 'Semanas' : 'Meses') : (isSemanal ? 'Semanas' : 'Cuotas');
+  const thCuota = esCapt ? (isSemanal ? 'Devolución semanal' : 'Devolución mensual') : colCuotaPrest;
+  const thTotal = esCapt ? 'Total a devolver' : 'Total a pagar';
+  const tituloDoc = esCapt ? 'Proyección de retorno' : 'Presupuesto';
+  const montoLabel = esCapt ? 'Capital aportado' : 'Monto solicitado';
+  const destinatarioLabel = esCapt ? 'Proyección para' : 'Presupuesto para';
+  const unidadFila = n => isSemanal ? (n === 1 ? 'semana' : 'semanas') : (esCapt ? (n === 1 ? 'mes' : 'meses') : (n === 1 ? 'cuota' : 'cuotas'));
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
-  <title>Presupuesto — ${esc(nombre)}</title>
+  <title>${tituloDoc} — ${esc(nombre)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; color: #2c3e50; padding: 2rem; max-width: 640px; margin: 0 auto; }
-    .header { border-bottom: 3px solid #1b4332; padding-bottom: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: flex-end; }
-    .brand { font-size: 1.6rem; font-weight: 700; color: #1b4332; }
+    body { font-family: Arial, sans-serif; color: #2c3e50; padding: 2rem; max-width: 680px; margin: 0 auto; }
+    .header { border-bottom: 3px solid ${accent}; padding-bottom: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: flex-end; }
+    .brand { font-size: 1.6rem; font-weight: 700; color: ${accent}; }
+    .doc-tipo { font-size: .8rem; color: #888; text-transform: uppercase; letter-spacing: .08em; }
     .meta { text-align: right; font-size: .88rem; color: #666; line-height: 1.6; }
-    .monto-box { background: #f0faf2; border: 2px solid #1b4332; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; }
+    .monto-box { background: ${accentBg}; border: 2px solid ${accent}; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; }
     .monto-label { font-size: .82rem; color: #666; text-transform: uppercase; letter-spacing: .05em; }
-    .monto-valor { font-size: 2rem; font-weight: 700; color: #1b4332; margin-top: .2rem; }
+    .monto-valor { font-size: 2rem; font-weight: 700; color: ${accent}; margin-top: .2rem; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
-    th { background: #1b4332; color: white; padding: .65rem 1rem; text-align: left; font-size: .85rem; font-weight: 600; }
-    td { padding: .65rem 1rem; border-bottom: 1px solid #e8f5e9; font-size: .95rem; }
-    tr:nth-child(even) td { background: #f8fdf9; }
+    th { background: ${accent}; color: white; padding: .65rem 1rem; text-align: left; font-size: .85rem; font-weight: 600; }
+    td { padding: .65rem 1rem; border-bottom: 1px solid ${accentBorder}; font-size: .95rem; }
+    tr:nth-child(even) td { background: ${accentRow}; }
     td:first-child { font-weight: 700; }
+    td.retorno { color: #1b7a3d; font-weight: 700; }
     .footer { font-size: .78rem; color: #aaa; border-top: 1px solid #e0e0e0; padding-top: .85rem; margin-top: .5rem; }
     @media print {
       body { padding: .8rem; }
@@ -318,32 +369,36 @@ function generarPresupuesto(monto, tasaMensual, sistema = 'flat', isSemanal = fa
 </head>
 <body>
   <div class="header">
-    <div class="brand">EM Financiera</div>
+    <div>
+      <div class="brand">EM Financiera</div>
+      <div class="doc-tipo">${tituloDoc}</div>
+    </div>
     <div class="meta">
-      Presupuesto para: <strong>${esc(nombre)}</strong><br>
+      ${destinatarioLabel}: <strong>${esc(nombre)}</strong><br>
       Fecha: ${esc(fecha)}
     </div>
   </div>
   <div class="monto-box">
-    <div class="monto-label">Monto solicitado</div>
+    <div class="monto-label">${montoLabel}</div>
     <div class="monto-valor">$ ${fmt(monto)}</div>
   </div>
   <table>
     <thead>
-      <tr><th>${isSemanal ? 'Semanas' : 'Cuotas'}</th><th>${isSemanal ? 'Tasa semanal' : 'Tasa mensual'}</th><th>${colCuota}</th><th>Total a pagar</th></tr>
+      <tr><th>${thPlazo}</th><th>${isSemanal ? 'Tasa semanal' : 'Tasa mensual'}</th><th>${thCuota}</th><th>${thTotal}</th>${esCapt ? '<th>Retorno (interés)</th>' : ''}</tr>
     </thead>
     <tbody>
       ${filas.map(f => `
         <tr>
-          <td>${f.n} ${isSemanal ? (f.n === 1 ? 'semana' : 'semanas') : (f.n === 1 ? 'cuota' : 'cuotas')}</td>
+          <td>${f.n} ${unidadFila(f.n)}</td>
           <td>${tasaMensual}%</td>
           <td>$ ${fmt(f.precioCuota)}</td>
           <td>$ ${fmt(f.totalFinanciado)}</td>
+          ${esCapt ? `<td class="retorno">$ ${fmt(f.retorno)}</td>` : ''}
         </tr>`).join('')}
     </tbody>
   </table>
   <div class="footer">
-    Presupuesto válido por 7 días &nbsp;·&nbsp; ${isSemanal ? 'Tasa semanal' : 'Tasa mensual'}: ${tasaMensual}% &nbsp;·&nbsp; Valores en pesos argentinos (ARS).
+    ${tituloDoc} ${esCapt ? 'estimativa' : 'válido'} por 7 días &nbsp;·&nbsp; ${isSemanal ? 'Tasa semanal' : 'Tasa mensual'}: ${tasaMensual}% &nbsp;·&nbsp; ${sistemaLabel} &nbsp;·&nbsp; Valores en pesos argentinos (ARS).${esCapt ? ' El retorno es el interés que gana el inversor.' : ''}
   </div>
   <script>window.print();<\/script>
 </body>
