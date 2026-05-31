@@ -56,10 +56,51 @@ function rolBadges(c) {
   return `<span style="display:inline-flex;gap:.3rem;flex-wrap:wrap">${badges.join('')}</span>`;
 }
 
+// Formato compacto de pesos para los resúmenes por socio.
+function fmtArs(n) {
+  return '$' + Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+}
+
+// Resumen operativo de un socio para la lista: una línea por rol con operaciones
+// vivas, mostrando la cantidad y el capital pendiente (a cobrar / a devolver).
+// Los importes vienen calculados por el backend (GET /clientes), misma definición
+// que el dashboard: capital − amortizado sobre operaciones vivas.
+function resumenOperativo(c) {
+  const lineas = [];
+  const presAct  = Number(c.prestamos_activos    || 0);
+  const presPend = Number(c.prestamos_pendiente  || 0);
+  const capAct   = Number(c.captaciones_activas   || 0);
+  const capPend  = Number(c.captaciones_pendiente || 0);
+
+  if (presAct > 0) {
+    lineas.push(`<div style="display:flex;align-items:center;gap:.4rem;white-space:nowrap">
+      <span style="width:7px;height:7px;border-radius:50%;background:#1b7a3d;flex-shrink:0"></span>
+      <span style="font-size:.82rem;color:#555">${presAct} préstamo${presAct === 1 ? '' : 's'} · <strong style="color:#9a7b3f">${fmtArs(presPend)}</strong> a cobrar</span>
+    </div>`);
+  }
+  if (capAct > 0) {
+    lineas.push(`<div style="display:flex;align-items:center;gap:.4rem;white-space:nowrap">
+      <span style="width:7px;height:7px;border-radius:50%;background:#2980b9;flex-shrink:0"></span>
+      <span style="font-size:.82rem;color:#555">${capAct} captaci${capAct === 1 ? 'ón' : 'ones'} · <strong style="color:#2980b9">${fmtArs(capPend)}</strong> a devolver</span>
+    </div>`);
+  }
+  if (lineas.length === 0) {
+    return (c.tiene_prestamos || c.tiene_captaciones)
+      ? '<span style="color:#aaa;font-size:.8rem">Sin operaciones activas</span>'
+      : '<span style="color:#ccc;font-size:.8rem">—</span>';
+  }
+  return `<div style="display:flex;flex-direction:column;gap:.3rem">${lineas.join('')}</div>`;
+}
+
 async function renderClientes() {
   const app = document.getElementById('app');
   app.innerHTML = '<p>Cargando...</p>';
   const clientes = await api.get('/clientes').catch(() => []);
+
+  const totClientes   = clientes.filter(c => c.tiene_prestamos).length;
+  const totInversores = clientes.filter(c => c.tiene_captaciones).length;
+  const totACobrar    = clientes.reduce((s, c) => s + Number(c.prestamos_pendiente   || 0), 0);
+  const totADevolver  = clientes.reduce((s, c) => s + Number(c.captaciones_pendiente || 0), 0);
 
   app.innerHTML = `
     <div class="seccion-titulo">
@@ -70,6 +111,25 @@ async function renderClientes() {
       Registro único de personas. Cada socio se carga una sola vez y puede usarse para un
       <strong>préstamo</strong> (como cliente) y/o para una <strong>captación</strong> (como inversor).
     </p>
+
+    <div class="cards" style="margin-bottom:1.25rem">
+      <div class="card">
+        <div class="label">Socios</div>
+        <div class="value">${clientes.length}</div>
+        <div style="font-size:.72rem;color:#999;margin-top:.4rem">${totClientes} como cliente · ${totInversores} como inversor</div>
+      </div>
+      <div class="card">
+        <div class="label">A cobrar — capital</div>
+        <div class="value" style="color:#9a7b3f;font-size:1.4rem">${fmtArs(totACobrar)}</div>
+        <div style="font-size:.72rem;color:#999;margin-top:.4rem">pendiente de clientes (préstamos)</div>
+      </div>
+      <div class="card">
+        <div class="label">A devolver — capital</div>
+        <div class="value" style="color:#2980b9;font-size:1.4rem">${fmtArs(totADevolver)}</div>
+        <div style="font-size:.72rem;color:#999;margin-top:.4rem">pendiente a inversores (captaciones)</div>
+      </div>
+    </div>
+
     <div style="margin-bottom:.75rem">
       <input id="buscarCliente" type="text" placeholder="Buscar por nombre o DNI..."
         oninput="filtrarClientes(this.value)"
@@ -83,13 +143,14 @@ async function renderClientes() {
           <th>DNI</th>
           <th>Teléfono</th>
           <th>Rol</th>
+          <th>Operaciones</th>
           <th>Docs</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="tablaClientes">
         ${clientes.length === 0
-          ? '<tr><td colspan="7" style="text-align:center;color:#999">Sin socios registrados</td></tr>'
+          ? '<tr><td colspan="8" style="text-align:center;color:#999">Sin socios registrados</td></tr>'
           : clientes.map(c => `
             <tr>
               <td><span style="font-family:var(--font-mono);font-size:.85rem;color:#888">S-${String(c.id).padStart(4,'0')}</span></td>
@@ -97,6 +158,7 @@ async function renderClientes() {
               <td>${esc(c.dni)}</td>
               <td>${esc(c.telefono || '-')}</td>
               <td>${rolBadges(c)}</td>
+              <td>${resumenOperativo(c)}</td>
               <td>${docsBadge(c.documentacion_presentada)}</td>
               <td style="display:flex;gap:.3rem">
                 <button class="btn-secondary" style="margin:0" onclick="renderClienteDetalle(${c.id})">Ver</button>
@@ -201,7 +263,11 @@ async function renderClienteDetalle(id) {
 
     <!-- Legajos de préstamos (rol cliente) -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
-      <h3>Préstamos <span style="font-size:.8rem;font-weight:400;color:#999">(como cliente)</span></h3>
+      <h3>Préstamos <span style="font-size:.8rem;font-weight:400;color:#999">(como cliente)</span>${
+        Number(cliente.prestamos_activos) > 0
+          ? `<span style="font-size:.8rem;font-weight:400;color:#9a7b3f;margin-left:.55rem">· ${cliente.prestamos_activos} activo${Number(cliente.prestamos_activos) === 1 ? '' : 's'} · ${fmtArs(cliente.prestamos_pendiente)} a cobrar</span>`
+          : ''
+      }</h3>
       <button class="btn-primary" onclick="renderPrestamoForm(${cliente.id})">+ Nuevo préstamo</button>
     </div>
     ${prestamos.length === 0
@@ -226,7 +292,11 @@ async function renderClienteDetalle(id) {
 
     <!-- Captaciones (rol inversor) -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
-      <h3>Captaciones <span style="font-size:.8rem;font-weight:400;color:#999">(como inversor)</span></h3>
+      <h3>Captaciones <span style="font-size:.8rem;font-weight:400;color:#999">(como inversor)</span>${
+        Number(cliente.captaciones_activas) > 0
+          ? `<span style="font-size:.8rem;font-weight:400;color:#2980b9;margin-left:.55rem">· ${cliente.captaciones_activas} activa${Number(cliente.captaciones_activas) === 1 ? '' : 's'} · ${fmtArs(cliente.captaciones_pendiente)} a devolver</span>`
+          : ''
+      }</h3>
       <button class="btn-primary" onclick="renderCaptacionForm(${cliente.id})">+ Nueva captación</button>
     </div>
     ${captaciones.length === 0

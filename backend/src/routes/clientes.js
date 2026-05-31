@@ -5,16 +5,61 @@ const { validarCUIT } = require('../services/validaciones');
 
 // Registro único de personas (BP / socios de negocio): cada persona se crea una
 // sola vez y puede actuar como cliente (préstamos) y/o como inversor (captaciones).
-// Las flags tiene_prestamos / tiene_captaciones permiten mostrar el rol en la UI.
+//
+// SOCIO_SELECT trae, además de los datos de la persona, el RESUMEN de su actividad
+// en cada rol — para que la pantalla Socios muestre el estado de un vistazo:
+//   rol cliente  → prestamos_activos / prestamos_capital / prestamos_pendiente
+//   rol inversor → captaciones_activas / captaciones_capital / captaciones_pendiente
+// "pendiente" usa la MISMA definición canónica que el dashboard: capital − amortizado,
+// sobre operaciones vivas (préstamos: NOT IN cancelado/archivado; captaciones: NOT IN
+// devuelta/archivada). Las flags tiene_prestamos / tiene_captaciones marcan el rol aunque
+// la operación ya esté cerrada (cubren todo el historial).
+const SOCIO_SELECT = `
+  SELECT c.*,
+    (COALESCE(pr.total_ops, 0)  > 0) AS tiene_prestamos,
+    (COALESCE(cap.total_ops, 0) > 0) AS tiene_captaciones,
+    COALESCE(pr.activos,    0) AS prestamos_activos,
+    COALESCE(pr.capital,    0) AS prestamos_capital,
+    COALESCE(pr.pendiente,  0) AS prestamos_pendiente,
+    COALESCE(cap.activas,   0) AS captaciones_activas,
+    COALESCE(cap.capital,   0) AS captaciones_capital,
+    COALESCE(cap.pendiente, 0) AS captaciones_pendiente
+  FROM clientes c
+  LEFT JOIN (
+    SELECT p.id_cliente,
+      COUNT(*)                                                          AS total_ops,
+      COUNT(*) FILTER (WHERE p.estado NOT IN ('cancelado','archivado')) AS activos,
+      COALESCE(SUM(p.monto_capital)
+               FILTER (WHERE p.estado NOT IN ('cancelado','archivado')), 0) AS capital,
+      COALESCE(SUM(p.monto_capital - COALESCE(am.amortizado, 0))
+               FILTER (WHERE p.estado NOT IN ('cancelado','archivado')), 0) AS pendiente
+    FROM prestamos p
+    LEFT JOIN (
+      SELECT id_prestamo, SUM(capital_amortizado) AS amortizado
+      FROM pagos GROUP BY id_prestamo
+    ) am ON am.id_prestamo = p.id
+    GROUP BY p.id_cliente
+  ) pr ON pr.id_cliente = c.id
+  LEFT JOIN (
+    SELECT k.id_inversor,
+      COUNT(*)                                                         AS total_ops,
+      COUNT(*) FILTER (WHERE k.estado NOT IN ('devuelta','archivada')) AS activas,
+      COALESCE(SUM(k.monto_capital)
+               FILTER (WHERE k.estado NOT IN ('devuelta','archivada')), 0) AS capital,
+      COALESCE(SUM(k.monto_capital - COALESCE(dv.devuelto, 0))
+               FILTER (WHERE k.estado NOT IN ('devuelta','archivada')), 0) AS pendiente
+    FROM captaciones k
+    LEFT JOIN (
+      SELECT id_captacion, SUM(capital_amortizado) AS devuelto
+      FROM devoluciones GROUP BY id_captacion
+    ) dv ON dv.id_captacion = k.id
+    GROUP BY k.id_inversor
+  ) cap ON cap.id_inversor = c.id
+`;
+
 router.get('/', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(`
-      SELECT c.*,
-        EXISTS (SELECT 1 FROM prestamos   p WHERE p.id_cliente  = c.id) AS tiene_prestamos,
-        EXISTS (SELECT 1 FROM captaciones k WHERE k.id_inversor = c.id) AS tiene_captaciones
-      FROM clientes c
-      ORDER BY c.apellido, c.nombre
-    `);
+    const { rows } = await pool.query(`${SOCIO_SELECT} ORDER BY c.apellido, c.nombre`);
     res.json(rows);
   } catch (err) { next(err); }
 });
@@ -53,7 +98,7 @@ router.post('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query(`${SOCIO_SELECT} WHERE c.id = $1`, [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
     res.json(rows[0]);
   } catch (err) { next(err); }
