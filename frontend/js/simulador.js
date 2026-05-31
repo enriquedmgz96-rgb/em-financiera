@@ -1,75 +1,58 @@
-async function renderSimulador() {
+// Dos simuladores dedicados (sin modo mezclado):
+//   • renderSimuladorPrestamos  → vive en el grupo Préstamos. Tasa desde el
+//     catálogo de categorías (lo que le cobrás al cliente) + campo editable.
+//   • renderSimuladorCaptaciones → vive en Plata de terceros. Tasa con atajos
+//     típicos (3/4/5% mensual) + campo editable: lo que le pagás al inversor.
+// Ambos comparten la misma forma. El motor de cálculo (simular / generar
+// Presupuesto / calcPMT) es común y distingue el modo por window._simModo.
+
+async function renderSimuladorBase(modo) {
   const app = document.getElementById('app');
   app.innerHTML = '<p>Cargando...</p>';
 
-  const [tasas, categoriasMensual, categoriasSemanal] = await Promise.all([
-    api.get('/tasas?moneda=ARS').catch(() => []),
-    api.get('/categorias?periodicidad=mensual').catch(() => []),
-    api.get('/categorias?periodicidad=semanal').catch(() => [])
-  ]);
-  let categorias = categoriasMensual;
+  const esCapt = modo === 'captacion';
+  window._simModo = modo;
+  window._sistemaSimulador = 'flat';
+
+  // Préstamos usa el catálogo guardado de categorías; captaciones usa atajos
+  // fijos (los % típicos que se le pagan al inversor) + el campo editable.
+  let categoriasMensual = [], categoriasSemanal = [];
+  if (!esCapt) {
+    [categoriasMensual, categoriasSemanal] = await Promise.all([
+      api.get('/categorias?periodicidad=mensual').catch(() => []),
+      api.get('/categorias?periodicidad=semanal').catch(() => []),
+    ]);
+  }
 
   const colorBadge = c => ({ verde: '#27ae60', amarillo: '#f39c12', rojo: '#e74c3c', azul: '#2980b9' }[c] || '#2980b9');
+  const chipsCapt = { mensual: [3, 4, 5], semanal: [1, 1.5, 2] };
+  const accent = esCapt ? '#2980b9' : '#1b4332';
 
-  app.innerHTML = `
-    <h2>Tasas & Simulador</h2>
+  // Estado de la simulación (cierre de este render; sólo hay un simulador activo)
+  let _periodo = 'mensual';
+  let tasaSel = esCapt ? 3 : (categoriasMensual.length ? parseFloat(categoriasMensual[0].tasa_mensual) : 7.5);
 
-    <div style="display:flex;gap:.5rem;margin-bottom:1rem">
-      <button id="modoPrestamo" onclick="simCambiarModo('prestamo')"
-        style="flex:1;padding:.6rem;border:2px solid #1b4332;background:#1b4332;color:white;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">
-        Préstamo &middot; lo que cobrás a un cliente
-      </button>
-      <button id="modoCaptacion" onclick="simCambiarModo('captacion')"
-        style="flex:1;padding:.6rem;border:2px solid #2980b9;background:white;color:#2980b9;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">
-        Captación &middot; lo que devolvés a un inversor
-      </button>
-    </div>
+  // Atajos de tasa (chips) según el periodo
+  const chipsHtml = (periodo) => {
+    const unidad = periodo === 'semanal' ? 'semanal' : 'mensual';
+    if (esCapt) {
+      return chipsCapt[periodo].map((t, i) => `
+        <button type="button" onclick="simSelTasa(${t}, this)"
+          style="border:2px solid #2980b9;background:${i === 0 ? '#2980b9' : 'white'};color:${i === 0 ? 'white' : '#2980b9'};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;font-family:inherit">
+          ${t}% ${unidad}</button>`).join('');
+    }
+    const cats = periodo === 'semanal' ? categoriasSemanal : categoriasMensual;
+    return cats.map((c, i) => `
+      <button type="button" onclick="simSelTasa(${parseFloat(c.tasa_mensual)}, this)"
+        style="border:2px solid ${colorBadge(c.color)};background:${i === 0 ? colorBadge(c.color) : 'white'};color:${i === 0 ? 'white' : colorBadge(c.color)};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;font-family:inherit">
+        ${parseFloat(c.tasa_mensual)}% ${unidad}</button>`).join('')
+      || '<span style="color:#888;font-size:.85rem">Sin categorías configuradas — usá el campo de tasa</span>';
+  };
 
-    <div style="background:white;padding:1.2rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1.5rem">
-      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
-        <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-          <label id="lblNombreSim">Nombre del cliente (opcional)</label>
-          <input type="text" id="nombreSim" placeholder="Ej: Juan Pérez" />
-        </div>
-        <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-          <label id="lblMontoSim">Monto a prestar</label>
-          <input type="text" id="montoSim" placeholder="Ej: $ 1.100.000" style="font-size:1.1rem;font-weight:600" />
-        </div>
-      </div>
-      <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
-        <button id="simBtnMensual" onclick="simCambiarPeriodo('mensual')"
-          style="flex:1;padding:.45rem;border:2px solid #1b4332;background:#1b4332;color:white;border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit">
-          Mensual
-        </button>
-        <button id="simBtnSemanal" onclick="simCambiarPeriodo('semanal')"
-          style="flex:1;padding:.45rem;border:2px solid #1b4332;background:white;color:#1b4332;border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit">
-          Semanal
-        </button>
-      </div>
-
-      <div id="simSeccionTasa" class="form-group" style="margin-bottom:0">
-        <label>Tasa de interés mensual</label>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem" id="btnsCategorias">
-          ${categoriasMensual.map((c, i) => `
-            <button onclick="seleccionarCategoria(${c.tasa_mensual}, this)"
-              style="border:2px solid ${colorBadge(c.color)};background:${i===0?colorBadge(c.color):'white'};color:${i===0?'white':colorBadge(c.color)};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;transition:.2s">
-              ${parseFloat(c.tasa_mensual)}% mensual
-            </button>`).join('')}
-        </div>
-      </div>
-    </div>
-
-    <div style="margin:.75rem 0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-      <span style="font-size:.85rem;color:#555;font-weight:600">Sistema:</span>
-      <button id="btnFlat" onclick="seleccionarSistema('flat',this)" style="border:2px solid #27ae60;background:#27ae60;color:white;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Clásico (interés plano)</button>
-      <button id="btnFrances" onclick="seleccionarSistema('frances',this)" style="border:2px solid #2980b9;background:white;color:#2980b9;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Francés (PMT)</button>
-      <button id="btnAleman" onclick="seleccionarSistema('aleman',this)" style="border:2px solid #e67e22;background:white;color:#e67e22;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Decreciente</button>
-    </div>
-
-    <div id="tablaSim"></div>
-
+  // Administrar categorías de tasa: sólo en el simulador de préstamos
+  const adminCatsHtml = esCapt ? '' : `
     <div style="margin-top:2rem;border-top:1px solid #eee;padding-top:1rem">
-      <h4 style="margin-bottom:.75rem;color:#666;font-size:.9rem">Administrar categorías</h4>
+      <h4 style="margin-bottom:.75rem;color:#666;font-size:.9rem">Administrar categorías de tasa</h4>
       <div style="margin-bottom:.5rem;font-size:.8rem;font-weight:600;color:#1b4332">Mensuales</div>
       <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.75rem">
         ${categoriasMensual.map(c => `
@@ -92,17 +75,83 @@ async function renderSimulador() {
           </div>`).join('')}
         <button class="btn-secondary" style="font-size:.85rem" onclick="nuevaCategoria('semanal')">+ Nueva semanal</button>
       </div>
+    </div>`;
+
+  app.innerHTML = `
+    <h2 style="margin-bottom:.2rem">Tasas &amp; Simulador <span style="color:${accent}">· ${esCapt ? 'Captaciones' : 'Préstamos'}</span></h2>
+    <p style="margin:.1rem 0 1rem;color:#666;font-size:.9rem">
+      ${esCapt
+        ? 'Simulá cuánto le devolvés a un inversor según el plazo y la tasa que le pagás.'
+        : 'Simulá la cuota y el total que le cobrás a un cliente según el plazo, la tasa y el sistema.'}
+    </p>
+
+    <div style="background:white;padding:1.2rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1.5rem">
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
+          <label>${esCapt ? 'Nombre del inversor (opcional)' : 'Nombre del cliente (opcional)'}</label>
+          <input type="text" id="nombreSim" placeholder="${esCapt ? 'Ej: María Gómez' : 'Ej: Juan Pérez'}" />
+        </div>
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
+          <label>${esCapt ? 'Capital que aporta el inversor' : 'Monto a prestar'}</label>
+          <input type="text" id="montoSim" placeholder="Ej: $ 1.100.000" style="font-size:1.1rem;font-weight:600" />
+        </div>
+      </div>
+
+      <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
+        <button id="simBtnMensual" type="button" onclick="simCambiarPeriodo('mensual')"
+          style="flex:1;padding:.45rem;border:2px solid ${accent};background:${accent};color:white;border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit">Mensual</button>
+        <button id="simBtnSemanal" type="button" onclick="simCambiarPeriodo('semanal')"
+          style="flex:1;padding:.45rem;border:2px solid ${accent};background:white;color:${accent};border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit">Semanal</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label id="simLblTasa">${esCapt ? 'Tasa que le pagás al inversor (mensual)' : 'Tasa de interés mensual'}</label>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;align-items:center" id="btnsCategorias">
+          ${chipsHtml('mensual')}
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;margin-top:.7rem">
+          <span style="font-size:.85rem;color:#555;font-weight:600">Otra tasa:</span>
+          <input type="number" id="tasaCustom" value="${tasaSel}" step="0.1" min="0.1"
+            style="width:90px;padding:.4rem .6rem;border:2px solid ${accent};border-radius:7px;font-weight:700;font-family:inherit;text-align:right" />
+          <span id="simUnidadTasa" style="font-size:.9rem;color:#555;font-weight:600">% mensual</span>
+        </div>
+      </div>
     </div>
+
+    <div style="margin:.75rem 0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <span style="font-size:.85rem;color:#555;font-weight:600">Sistema:</span>
+      <button id="btnFlat" type="button" onclick="seleccionarSistema('flat',this)" style="border:2px solid #27ae60;background:#27ae60;color:white;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Clásico (interés plano)</button>
+      <button id="btnFrances" type="button" onclick="seleccionarSistema('frances',this)" style="border:2px solid #2980b9;background:white;color:#2980b9;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Francés (PMT)</button>
+      <button id="btnAleman" type="button" onclick="seleccionarSistema('aleman',this)" style="border:2px solid #e67e22;background:white;color:#e67e22;padding:.3rem .9rem;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:600">Decreciente</button>
+    </div>
+
+    <div id="tablaSim"></div>
+
+    ${adminCatsHtml}
   `;
 
-  // Tasa seleccionada por defecto: primera categoría mensual
-  let tasaSeleccionada = categoriasMensual.length > 0 ? parseFloat(categoriasMensual[0].tasa_mensual) : 7.5;
-  window._sistemaSimulador = 'flat';
+  // ── Handlers (se reasignan en cada render; sólo hay un simulador activo) ──
+  const reSimular = () => {
+    const raw = (document.getElementById('montoSim').value || '').replace(/\D/g, '');
+    simular(parseInt(raw) || 0, tasaSel, window._sistemaSimulador, _periodo === 'semanal');
+  };
+
+  // Atajo de tasa (chip) → setea la tasa y refleja en el campo editable
+  window.simSelTasa = (tasa, btn) => {
+    document.querySelectorAll('#btnsCategorias button').forEach(b => {
+      b.style.background = 'white';
+      b.style.color = b.style.borderColor;
+    });
+    if (btn) { btn.style.background = btn.style.borderColor; btn.style.color = 'white'; }
+    tasaSel = tasa;
+    const inp = document.getElementById('tasaCustom');
+    if (inp) inp.value = tasa;
+    reSimular();
+  };
 
   window.seleccionarSistema = (sistema, btn) => {
     window._sistemaSimulador = sistema;
-    const colores = { flat: '#27ae60', frances: '#2980b9', aleman: '#e67e22' };
-    ['btnFlat','btnFrances','btnAleman'].forEach(id => {
+    ['btnFlat', 'btnFrances', 'btnAleman'].forEach(id => {
       const b = document.getElementById(id);
       if (!b) return;
       b.style.background = 'white';
@@ -110,89 +159,58 @@ async function renderSimulador() {
     });
     btn.style.background = btn.style.borderColor;
     btn.style.color = 'white';
-    const raw = document.getElementById('montoSim').value.replace(/\D/g, '');
-    if (raw) simular(parseInt(raw), tasaSeleccionada, sistema, _simPeriodicidad === 'semanal');
+    reSimular();
   };
 
-  window.seleccionarCategoria = (tasa, btn) => {
-    document.querySelectorAll('#btnsCategorias button').forEach(b => {
-      const color = b.style.borderColor;
-      b.style.background = 'white';
-      b.style.color = color;
-    });
-    btn.style.background = btn.style.borderColor;
-    btn.style.color = 'white';
-    tasaSeleccionada = tasa;
-    const raw = document.getElementById('montoSim').value.replace(/\D/g, '');
-    if (raw) simular(parseInt(raw), tasaSeleccionada, window._sistemaSimulador, _simPeriodicidad === 'semanal');
-  };
-
-  let _simPeriodicidad = 'mensual';
-
-  // Guardar HTML original de categorías (mensual)
-  const _htmlCatsMensual = document.getElementById('btnsCategorias').innerHTML;
-  const _labelTasaEl = document.querySelector('#simSeccionTasa label');
-  const _labelTasaOriginal = _labelTasaEl ? _labelTasaEl.textContent : 'Tasa de interés mensual';
-
-  window.simCambiarPeriodo = async (p) => {
-    _simPeriodicidad = p;
+  window.simCambiarPeriodo = (p) => {
+    _periodo = p;
     const isSem = p === 'semanal';
-    const btnM = document.getElementById('simBtnMensual');
-    const btnS = document.getElementById('simBtnSemanal');
-    if (btnM) { btnM.style.background = isSem ? 'white' : '#1b4332'; btnM.style.color = isSem ? '#1b4332' : 'white'; }
-    if (btnS) { btnS.style.background = isSem ? '#1b4332' : 'white'; btnS.style.color = isSem ? 'white' : '#1b4332'; }
+    const bM = document.getElementById('simBtnMensual');
+    const bS = document.getElementById('simBtnSemanal');
+    if (bM) { bM.style.background = isSem ? 'white' : accent; bM.style.color = isSem ? accent : 'white'; }
+    if (bS) { bS.style.background = isSem ? accent : 'white'; bS.style.color = isSem ? 'white' : accent; }
 
-    const labelEl = document.querySelector('#simSeccionTasa label');
-    if (labelEl) labelEl.textContent = isSem ? 'Tasa de interés semanal' : _labelTasaOriginal;
+    const lbl = document.getElementById('simLblTasa');
+    if (lbl) lbl.textContent = esCapt
+      ? `Tasa que le pagás al inversor (${isSem ? 'semanal' : 'mensual'})`
+      : (isSem ? 'Tasa de interés semanal' : 'Tasa de interés mensual');
+    const uni = document.getElementById('simUnidadTasa');
+    if (uni) uni.textContent = isSem ? '% semanal' : '% mensual';
 
-    const contenedor = document.getElementById('btnsCategorias');
-    if (isSem) {
-      categorias = categoriasSemanal;
-      const colorMap = { verde: '#27ae60', amarillo: '#f39c12', rojo: '#e74c3c', azul: '#2980b9' };
-      contenedor.innerHTML = categoriasSemanal.map((c, i) => `
-        <button onclick="seleccionarCategoria(${parseFloat(c.tasa_mensual)}, this)"
-          style="border:2px solid ${colorMap[c.color]||'#2980b9'};background:${i===0?colorMap[c.color]||'#2980b9':'white'};color:${i===0?'white':colorMap[c.color]||'#2980b9'};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;transition:.2s">
-          ${parseFloat(c.tasa_mensual)}% semanal
-        </button>`).join('') || '<span style="color:#888;font-size:.85rem">Sin categorías semanales configuradas</span>';
-      tasaSeleccionada = categoriasSemanal.length > 0 ? parseFloat(categoriasSemanal[0].tasa_mensual) : 3;
+    document.getElementById('btnsCategorias').innerHTML = chipsHtml(p);
+    if (esCapt) {
+      tasaSel = chipsCapt[p][0];
     } else {
-      categorias = categoriasMensual;
-      contenedor.innerHTML = _htmlCatsMensual;
-      tasaSeleccionada = categoriasMensual.length > 0 ? parseFloat(categoriasMensual[0].tasa_mensual) : 7.5;
+      const cats = isSem ? categoriasSemanal : categoriasMensual;
+      tasaSel = cats.length ? parseFloat(cats[0].tasa_mensual) : (isSem ? 3 : 7.5);
     }
-
-    const raw = document.getElementById('montoSim').value.replace(/\D/g, '');
-    if (raw) simular(parseInt(raw), tasaSeleccionada, window._sistemaSimulador, isSem);
+    const inp = document.getElementById('tasaCustom');
+    if (inp) inp.value = tasaSel;
+    reSimular();
   };
 
-  // Modo: préstamo (lo que cobrás a un cliente) vs captación (lo que devolvés a un inversor)
-  window._simModo = 'prestamo';
-  window.simCambiarModo = (modo) => {
-    window._simModo = modo;
-    const esCapt = modo === 'captacion';
-    const bP = document.getElementById('modoPrestamo');
-    const bC = document.getElementById('modoCaptacion');
-    if (bP) { bP.style.background = esCapt ? 'white' : '#1b4332'; bP.style.color = esCapt ? '#1b4332' : 'white'; }
-    if (bC) { bC.style.background = esCapt ? '#2980b9' : 'white'; bC.style.color = esCapt ? 'white' : '#2980b9'; }
-
-    const lblN = document.getElementById('lblNombreSim');
-    const lblM = document.getElementById('lblMontoSim');
-    const inpN = document.getElementById('nombreSim');
-    const inpM = document.getElementById('montoSim');
-    if (lblN) lblN.textContent = esCapt ? 'Nombre del inversor (opcional)' : 'Nombre del cliente (opcional)';
-    if (lblM) lblM.textContent = esCapt ? 'Capital que aporta el inversor' : 'Monto a prestar';
-    if (inpN) inpN.placeholder = esCapt ? 'Ej: María Gómez' : 'Ej: Juan Pérez';
-
-    const raw = inpM ? inpM.value.replace(/\D/g, '') : '';
-    if (raw) simular(parseInt(raw), tasaSeleccionada, window._sistemaSimulador, _simPeriodicidad === 'semanal');
-  };
+  // Campo de tasa editable → "que solo pueda modificar"
+  document.getElementById('tasaCustom').addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v) && v > 0) {
+      tasaSel = v;
+      document.querySelectorAll('#btnsCategorias button').forEach(b => {
+        b.style.background = 'white';
+        b.style.color = b.style.borderColor;
+      });
+      reSimular();
+    }
+  });
 
   document.getElementById('montoSim').addEventListener('input', e => {
     const raw = e.target.value.replace(/\D/g, '');
     e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
-    simular(parseInt(raw) || 0, tasaSeleccionada, window._sistemaSimulador, _simPeriodicidad === 'semanal');
+    simular(parseInt(raw) || 0, tasaSel, window._sistemaSimulador, _periodo === 'semanal');
   });
 }
+
+function renderSimuladorPrestamos() { return renderSimuladorBase('prestamo'); }
+function renderSimuladorCaptaciones() { return renderSimuladorBase('captacion'); }
 
 function calcPMT(capital, tasa, n) {
   const r = tasa / 100;
@@ -275,7 +293,7 @@ async function nuevaCategoria(periodicidad = 'mensual') {
   const color = prompt('Color (verde / amarillo / rojo / azul):', 'azul');
   try {
     await api.post('/categorias', { nombre, tasa_mensual: parseFloat(tasa), color: color || 'azul', periodicidad });
-    renderSimulador();
+    renderSimuladorPrestamos();
   } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
@@ -288,7 +306,7 @@ async function editarCategoria(id, nombreActual, tasaActual, colorActual, period
   if (!confirm(`¿Guardar cambios en "${nombre}" con tasa ${tasa}%?`)) return;
   try {
     await api.put(`/categorias/${id}`, { nombre, tasa_mensual: parseFloat(tasa) });
-    renderSimulador();
+    renderSimuladorPrestamos();
   } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
@@ -296,7 +314,7 @@ async function eliminarCategoria(id) {
   if (!confirm('¿Eliminar esta categoría?')) return;
   try {
     await api.delete(`/categorias/${id}`);
-    renderSimulador();
+    renderSimuladorPrestamos();
   } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
