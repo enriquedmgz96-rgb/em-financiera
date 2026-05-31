@@ -23,7 +23,7 @@ router.get('/', async (req, res, next) => {
     const { rows } = await pool.query(
       `SELECT c.*, i.nombre, i.apellido, i.dni
        FROM captaciones c
-       JOIN inversores i ON i.id = c.id_inversor
+       JOIN clientes i ON i.id = c.id_inversor
        ${where} ORDER BY c.fecha_aporte DESC`,
       params
     );
@@ -78,7 +78,7 @@ router.get('/:id', async (req, res, next) => {
   try {
     const { rows: captaciones } = await pool.query(
       `SELECT c.*, i.nombre, i.apellido, i.dni, i.cuit, i.telefono, i.banco_cbu, i.banco_alias
-       FROM captaciones c JOIN inversores i ON i.id = c.id_inversor WHERE c.id = $1`,
+       FROM captaciones c JOIN clientes i ON i.id = c.id_inversor WHERE c.id = $1`,
       [req.params.id]
     );
     if (captaciones.length === 0) return res.status(404).json({ error: 'Captación no encontrada' });
@@ -119,7 +119,7 @@ router.get('/:id/contrato-mutuo', async (req, res, next) => {
   try {
     const { rows: caps } = await pool.query(
       `SELECT c.*, i.nombre, i.apellido, i.dni, i.cuit, i.domicilio
-       FROM captaciones c JOIN inversores i ON i.id = c.id_inversor
+       FROM captaciones c JOIN clientes i ON i.id = c.id_inversor
        WHERE c.id = $1`,
       [req.params.id]
     );

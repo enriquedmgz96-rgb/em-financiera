@@ -3,15 +3,27 @@ const router = express.Router();
 const pool = require('../db/connection');
 const { validarCUIT } = require('../services/validaciones');
 
+// Registro único de personas (BP / socios de negocio): cada persona se crea una
+// sola vez y puede actuar como cliente (préstamos) y/o como inversor (captaciones).
+// Las flags tiene_prestamos / tiene_captaciones permiten mostrar el rol en la UI.
 router.get('/', async (req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM clientes ORDER BY apellido, nombre');
+    const { rows } = await pool.query(`
+      SELECT c.*,
+        EXISTS (SELECT 1 FROM prestamos   p WHERE p.id_cliente  = c.id) AS tiene_prestamos,
+        EXISTS (SELECT 1 FROM captaciones k WHERE k.id_inversor = c.id) AS tiene_captaciones
+      FROM clientes c
+      ORDER BY c.apellido, c.nombre
+    `);
     res.json(rows);
   } catch (err) { next(err); }
 });
 
 router.post('/', async (req, res, next) => {
-  const { nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio, documentacion_presentada } = req.body;
+  const {
+    nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio,
+    documentacion_presentada, email, banco_cbu, banco_alias,
+  } = req.body;
   if (!nombre || !apellido || !dni) {
     return res.status(400).json({ error: 'nombre, apellido y dni son requeridos (UIF Res. 30/2017)' });
   }
@@ -24,9 +36,13 @@ router.post('/', async (req, res, next) => {
     : (documentacion_presentada || '[]');
   try {
     const { rows } = await pool.query(
-      `INSERT INTO clientes (nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio, documentacion_presentada)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [nombre, apellido, dni, cuit || null, telefono || null, origen || null, observaciones || null, domicilio || null, docJson]
+      `INSERT INTO clientes
+         (nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio,
+          documentacion_presentada, email, banco_cbu, banco_alias)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [nombre, apellido, dni, cuit || null, telefono || null, origen || null,
+       observaciones || null, domicilio || null, docJson,
+       email || null, banco_cbu || null, banco_alias || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -44,7 +60,10 @@ router.get('/:id', async (req, res, next) => {
 });
 
 router.put('/:id', async (req, res, next) => {
-  const { nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio, documentacion_presentada } = req.body;
+  const {
+    nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio,
+    documentacion_presentada, email, banco_cbu, banco_alias,
+  } = req.body;
   if (cuit) {
     const v = validarCUIT(cuit);
     if (!v.valido) return res.status(400).json({ error: `CUIT inválido: ${v.mensaje}` });
@@ -63,9 +82,13 @@ router.put('/:id', async (req, res, next) => {
          origen                   = COALESCE($6, origen),
          observaciones            = COALESCE($7, observaciones),
          domicilio                = COALESCE($8, domicilio),
-         documentacion_presentada = COALESCE($9, documentacion_presentada)
+         documentacion_presentada = COALESCE($9, documentacion_presentada),
+         email                    = COALESCE($11, email),
+         banco_cbu                = COALESCE($12, banco_cbu),
+         banco_alias              = COALESCE($13, banco_alias)
        WHERE id = $10 RETURNING *`,
-      [nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio || null, docJson ?? null, req.params.id]
+      [nombre, apellido, dni, cuit, telefono, origen, observaciones, domicilio || null,
+       docJson ?? null, req.params.id, email ?? null, banco_cbu ?? null, banco_alias ?? null]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
     res.json(rows[0]);

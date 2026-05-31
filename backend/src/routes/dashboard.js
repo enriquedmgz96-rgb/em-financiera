@@ -100,7 +100,7 @@ router.get('/', async (req, res, next) => {
                CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
              ))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM captaciones c
-      JOIN inversores i ON i.id = c.id_inversor
+      JOIN clientes i ON i.id = c.id_inversor
       LEFT JOIN devoluciones d ON d.id_captacion = c.id
       WHERE c.${VIVAS}
       GROUP BY c.id, i.id
@@ -121,7 +121,7 @@ router.get('/', async (req, res, next) => {
                CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
              ))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM captaciones c
-      JOIN inversores i ON i.id = c.id_inversor
+      JOIN clientes i ON i.id = c.id_inversor
       LEFT JOIN devoluciones d ON d.id_captacion = c.id
       WHERE c.${VIVAS}
       GROUP BY c.id, i.id

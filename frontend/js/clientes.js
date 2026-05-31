@@ -1,12 +1,18 @@
+// Registro único de personas (BP / socios). La documentación cubre ambos roles:
+// los primeros grupos aplican al rol cliente (préstamos); los últimos al rol
+// inversor (captaciones). Una persona presenta solo lo que corresponda a su uso.
 const DOCS_REQUERIDOS = [
   { id: 'dni_frente_dorso',       label: 'Fotocopia DNI (frente y dorso)',                              grupo: 'Identidad' },
   { id: 'comprobante_domicilio',  label: 'Comprobante de domicilio (boleta de luz/gas/agua, últ. 90 días)', grupo: 'Identidad' },
-  { id: 'recibos_sueldo',         label: 'Últimos 3 recibos de sueldo',                                 grupo: 'Ingresos' },
-  { id: 'constancia_monotributo', label: 'Constancia de inscripción en monotributo (AFIP)',              grupo: 'Ingresos' },
-  { id: 'pagos_monotributo',      label: 'Últimos 3 pagos de monotributo',                              grupo: 'Ingresos' },
-  { id: 'extracto_bancario',      label: 'Extracto bancario (últimos 3 meses)',                          grupo: 'Ingresos' },
-  { id: 'dni_garante',            label: 'Fotocopia DNI del garante (frente y dorso)',                   grupo: 'Garantía' },
-  { id: 'ingresos_garante',       label: 'Comprobante de ingresos del garante',                          grupo: 'Garantía' },
+  { id: 'recibos_sueldo',         label: 'Últimos 3 recibos de sueldo',                                 grupo: 'Ingresos (préstamo)' },
+  { id: 'constancia_monotributo', label: 'Constancia de inscripción en monotributo (AFIP)',              grupo: 'Ingresos (préstamo)' },
+  { id: 'pagos_monotributo',      label: 'Últimos 3 pagos de monotributo',                              grupo: 'Ingresos (préstamo)' },
+  { id: 'extracto_bancario',      label: 'Extracto bancario (últimos 3 meses)',                          grupo: 'Ingresos (préstamo)' },
+  { id: 'dni_garante',            label: 'Fotocopia DNI del garante (frente y dorso)',                   grupo: 'Garantía (préstamo)' },
+  { id: 'ingresos_garante',       label: 'Comprobante de ingresos del garante',                          grupo: 'Garantía (préstamo)' },
+  { id: 'origen_fondos',          label: 'Declaración / comprobante de origen de los fondos',            grupo: 'Inversor (captación)' },
+  { id: 'contrato_mutuo',         label: 'Contrato de mutuo firmado (físico)',                          grupo: 'Inversor (captación)' },
+  { id: 'pagare',                 label: 'Pagaré firmado',                                              grupo: 'Inversor (captación)' },
 ];
 
 const ORIGENES = [
@@ -17,6 +23,9 @@ const ORIGENES = [
   'Facebook',
   'WhatsApp',
   'Cliente recurrente',
+  'Familiar',
+  'Conocido',
+  'Otro inversor',
   'Publicidad / Volante',
   'Cartel del local',
 ];
@@ -37,6 +46,16 @@ function docsBadge(docsRaw) {
   return `<span style="font-size:.8rem;font-weight:700;color:${color}">${docs.length}/${total}</span>`;
 }
 
+// Badges de rol: una persona puede ser cliente (préstamos), inversor (captaciones),
+// ambos, o todavía ninguno (recién dada de alta).
+function rolBadges(c) {
+  const badges = [];
+  if (c.tiene_prestamos)   badges.push('<span class="badge" style="background:#d5f5e3;color:#1b7a3d;font-size:.72rem">Cliente</span>');
+  if (c.tiene_captaciones) badges.push('<span class="badge" style="background:#d6eaf8;color:#2980b9;font-size:.72rem">Inversor</span>');
+  if (badges.length === 0) return '<span style="color:#bbb;font-size:.78rem">Sin operaciones</span>';
+  return `<span style="display:inline-flex;gap:.3rem;flex-wrap:wrap">${badges.join('')}</span>`;
+}
+
 async function renderClientes() {
   const app = document.getElementById('app');
   app.innerHTML = '<p>Cargando...</p>';
@@ -44,9 +63,13 @@ async function renderClientes() {
 
   app.innerHTML = `
     <div class="seccion-titulo">
-      <h2>Clientes</h2>
-      <button class="btn-primary" onclick="renderClienteForm()">+ Nuevo cliente</button>
+      <h2>Socios <span style="font-family:var(--font-mono);font-size:.8rem;font-weight:400;color:#999">(BP)</span></h2>
+      <button class="btn-primary" onclick="renderClienteForm()">+ Nuevo socio</button>
     </div>
+    <p style="color:#888;font-size:.85rem;margin:-.4rem 0 1rem;max-width:680px">
+      Registro único de personas. Cada socio se carga una sola vez y puede usarse para un
+      <strong>préstamo</strong> (como cliente) y/o para una <strong>captación</strong> (como inversor).
+    </p>
     <div style="margin-bottom:.75rem">
       <input id="buscarCliente" type="text" placeholder="Buscar por nombre o DNI..."
         oninput="filtrarClientes(this.value)"
@@ -59,21 +82,21 @@ async function renderClientes() {
           <th>Apellido y nombre</th>
           <th>DNI</th>
           <th>Teléfono</th>
-          <th>Origen</th>
+          <th>Rol</th>
           <th>Docs</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="tablaClientes">
         ${clientes.length === 0
-          ? '<tr><td colspan="7" style="text-align:center;color:#999">Sin clientes registrados</td></tr>'
+          ? '<tr><td colspan="7" style="text-align:center;color:#999">Sin socios registrados</td></tr>'
           : clientes.map(c => `
             <tr>
-              <td><span style="font-family:var(--font-mono);font-size:.85rem;color:#888">C-${String(c.id).padStart(4,'0')}</span></td>
+              <td><span style="font-family:var(--font-mono);font-size:.85rem;color:#888">S-${String(c.id).padStart(4,'0')}</span></td>
               <td><strong>${esc(c.apellido)}, ${esc(c.nombre)}</strong></td>
               <td>${esc(c.dni)}</td>
               <td>${esc(c.telefono || '-')}</td>
-              <td>${esc(c.origen || '-')}</td>
+              <td>${rolBadges(c)}</td>
               <td>${docsBadge(c.documentacion_presentada)}</td>
               <td style="display:flex;gap:.3rem">
                 <button class="btn-secondary" style="margin:0" onclick="renderClienteDetalle(${c.id})">Ver</button>
@@ -88,11 +111,12 @@ async function renderClientes() {
 async function renderClienteDetalle(id) {
   const app = document.getElementById('app');
   app.innerHTML = '<p>Cargando...</p>';
-  const [cliente, prestamos] = await Promise.all([
+  const [cliente, prestamos, captaciones] = await Promise.all([
     api.get(`/clientes/${id}`).catch(() => null),
-    api.get(`/prestamos?id_cliente=${id}&incluir_archivados=true`).catch(() => [])
+    api.get(`/prestamos?id_cliente=${id}&incluir_archivados=true`).catch(() => []),
+    api.get(`/captaciones?id_inversor=${id}&incluir_archivadas=true`).catch(() => [])
   ]);
-  if (!cliente) { app.innerHTML = '<p class="msg-error">Cliente no encontrado</p>'; return; }
+  if (!cliente) { app.innerHTML = '<p class="msg-error">Socio no encontrado</p>'; return; }
 
   const docs = parseDocs(cliente.documentacion_presentada);
   const grupos = [...new Set(DOCS_REQUERIDOS.map(d => d.grupo))];
@@ -104,13 +128,19 @@ async function renderClienteDetalle(id) {
     if (estado === 'archivado') return '<span class="badge" style="background:#f0f0f0;color:#888">Archivado</span>';
     return '<span class="badge badge-verde">Activo</span>';
   };
+  const estadoBadgeCap = estado => {
+    if (estado === 'devuelta')  return '<span class="badge badge-verde">Devuelta</span>';
+    if (estado === 'mora')      return '<span class="badge badge-rojo">Mora</span>';
+    if (estado === 'archivada') return '<span class="badge" style="background:#f0f0f0;color:#888">Archivada</span>';
+    return '<span class="badge badge-verde">Activa</span>';
+  };
 
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>
         ${esc(cliente.apellido)}, ${esc(cliente.nombre)}
         <span style="font-family:var(--font-mono);font-size:.85rem;font-weight:400;color:#888;margin-left:.75rem">
-          Legajo C-${String(cliente.id).padStart(4,'0')}
+          Legajo S-${String(cliente.id).padStart(4,'0')}
         </span>
       </h2>
       <div style="display:flex;gap:.5rem">
@@ -119,10 +149,15 @@ async function renderClienteDetalle(id) {
       </div>
     </div>
 
+    <div style="display:flex;gap:.4rem;margin-bottom:1rem">
+      ${rolBadges({ tiene_prestamos: prestamos.length > 0, tiene_captaciones: captaciones.length > 0 })}
+    </div>
+
     <div class="cards" style="margin-bottom:1.5rem">
       <div class="card"><div class="label">DNI</div><div class="value" style="font-size:1.2rem">${esc(cliente.dni)}</div></div>
       <div class="card"><div class="label">CUIT</div><div class="value" style="font-size:1.2rem">${esc(cliente.cuit || '-')}</div></div>
       <div class="card"><div class="label">Teléfono</div><div class="value" style="font-size:1.2rem">${esc(cliente.telefono || '-')}</div></div>
+      <div class="card"><div class="label">Email</div><div class="value" style="font-size:1rem">${esc(cliente.email || '-')}</div></div>
       <div class="card"><div class="label">Origen</div><div class="value" style="font-size:1.2rem">${esc(cliente.origen || '-')}</div></div>
       <div class="card"><div class="label">Alta</div><div class="value" style="font-size:1.1rem">${new Date(cliente.fecha_alta).toLocaleDateString('es-AR')}</div></div>
       <div class="card"><div class="label">Documentación</div><div class="value" style="font-size:1.3rem">${docs.length}/${DOCS_REQUERIDOS.length}</div>
@@ -149,21 +184,29 @@ async function renderClienteDetalle(id) {
         `).join('')}
       </div>
 
-      <!-- Observaciones -->
-      <div style="background:white;border-radius:8px;padding:1.2rem;box-shadow:0 1px 4px rgba(0,0,0,.06)">
-        <h4 style="margin-bottom:.75rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em;color:#666">Observaciones</h4>
-        <p style="font-size:.9rem;color:#555;white-space:pre-wrap">${esc(cliente.observaciones || 'Sin observaciones.')}</p>
+      <!-- Contacto / bancarios / observaciones -->
+      <div style="display:flex;flex-direction:column;gap:1.5rem">
+        <div style="background:white;border-radius:8px;padding:1.2rem;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+          <h4 style="margin-bottom:.75rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em;color:#666">Datos bancarios (devoluciones)</h4>
+          <p style="font-size:.88rem;margin-bottom:.4rem"><strong>CBU:</strong> ${esc(cliente.banco_cbu || '—')}</p>
+          <p style="font-size:.88rem;margin-bottom:.4rem"><strong>Alias:</strong> ${esc(cliente.banco_alias || '—')}</p>
+          ${cliente.domicilio ? `<p style="font-size:.85rem;color:#555;margin-top:.6rem">📍 ${esc(cliente.domicilio)}</p>` : ''}
+        </div>
+        <div style="background:white;border-radius:8px;padding:1.2rem;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+          <h4 style="margin-bottom:.75rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em;color:#666">Observaciones</h4>
+          <p style="font-size:.9rem;color:#555;white-space:pre-wrap">${esc(cliente.observaciones || 'Sin observaciones.')}</p>
+        </div>
       </div>
     </div>
 
-    <!-- Legajos de préstamos -->
+    <!-- Legajos de préstamos (rol cliente) -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
-      <h3>Legajos de préstamos</h3>
+      <h3>Préstamos <span style="font-size:.8rem;font-weight:400;color:#999">(como cliente)</span></h3>
       <button class="btn-primary" onclick="renderPrestamoForm(${cliente.id})">+ Nuevo préstamo</button>
     </div>
     ${prestamos.length === 0
-      ? '<p style="color:#999">Sin préstamos registrados.</p>'
-      : `<table>
+      ? '<p style="color:#999;margin-bottom:2rem">Sin préstamos registrados.</p>'
+      : `<table style="margin-bottom:2rem">
           <thead>
             <tr><th>Legajo</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th></th></tr>
           </thead>
@@ -177,6 +220,31 @@ async function renderClienteDetalle(id) {
                 <td>${String(p.primer_vencimiento).split('T')[0]}</td>
                 <td>${estadoBadge(p.estado)}</td>
                 <td><button class="btn-secondary" style="margin:0" onclick="renderPrestamoDetalle(${p.id})">Ver</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`}
+
+    <!-- Captaciones (rol inversor) -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+      <h3>Captaciones <span style="font-size:.8rem;font-weight:400;color:#999">(como inversor)</span></h3>
+      <button class="btn-primary" onclick="renderCaptacionForm(${cliente.id})">+ Nueva captación</button>
+    </div>
+    ${captaciones.length === 0
+      ? '<p style="color:#999">Sin captaciones registradas.</p>'
+      : `<table>
+          <thead>
+            <tr><th>Legajo</th><th>Capital</th><th>Tasa</th><th>Cuotas</th><th>1er Vcto</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${captaciones.map(c => `
+              <tr>
+                <td><span style="font-family:var(--font-mono);font-size:.85rem;color:#888">K-${String(c.id).padStart(4,'0')}</span></td>
+                <td>$${fmt(c.monto_capital)} ${esc(c.moneda)}</td>
+                <td>${parseFloat(c.tasa_interes_mensual)}% ${c.periodicidad === 'semanal' ? 's.' : 'm.'}</td>
+                <td>${c.total_cuotas}</td>
+                <td>${String(c.primer_vencimiento).split('T')[0]}</td>
+                <td>${estadoBadgeCap(c.estado)}</td>
+                <td><button class="btn-secondary" style="margin:0" onclick="renderCaptacionDetalle(${c.id})">Ver</button></td>
               </tr>`).join('')}
           </tbody>
         </table>`}
@@ -226,17 +294,25 @@ async function renderClienteForm(id = null) {
     </style>
     <div class="seccion-titulo">
       <h2>
-        ${id ? 'Editar cliente' : 'Nuevo cliente'}
-        ${id ? `<span style="font-family:var(--font-mono);font-size:.82rem;font-weight:400;color:#888;margin-left:.75rem">Legajo C-${String(id).padStart(4,'0')}</span>` : ''}
+        ${id ? 'Editar socio' : 'Nuevo socio'}
+        ${id ? `<span style="font-family:var(--font-mono);font-size:.82rem;font-weight:400;color:#888;margin-left:.75rem">Legajo S-${String(id).padStart(4,'0')}</span>` : ''}
       </h2>
       <button class="btn-secondary" onclick="${id ? `renderClienteDetalle(${id})` : 'renderClientes()'}">← Volver</button>
     </div>
+
+    <div style="background:#eef4f0;border-left:3px solid #1b4332;padding:.65rem .85rem;border-radius:6px;font-size:.85rem;margin-bottom:1.25rem;max-width:760px">
+      <strong>Registro único:</strong> cargá la persona una sola vez. Después podés usarla para un
+      <strong>préstamo</strong> (rol cliente) y/o una <strong>captación</strong> (rol inversor).
+      Los datos bancarios y la documentación de inversor son opcionales y solo hacen falta si va a aportar capital.
+    </div>
+
     <form id="formCliente">
       <div class="form-group"><label>Nombre *</label><input name="nombre" value="${esc(cliente?.nombre || '')}" required /></div>
       <div class="form-group"><label>Apellido *</label><input name="apellido" value="${esc(cliente?.apellido || '')}" required /></div>
       <div class="form-group"><label>DNI * (requerido UIF)</label><input name="dni" value="${esc(cliente?.dni || '')}" required /></div>
       <div class="form-group"><label>CUIT (requerido UIF)</label><input name="cuit" value="${esc(cliente?.cuit || '')}" placeholder="20-12345678-9" /></div>
       <div class="form-group"><label>Teléfono</label><input name="telefono" value="${esc(cliente?.telefono || '')}" /></div>
+      <div class="form-group"><label>Email</label><input name="email" type="email" value="${esc(cliente?.email || '')}" /></div>
       <div class="form-group">
         <label>Origen / Referido</label>
         <select name="origen_select" id="origenSelect" onchange="window.toggleOrigenOtro()">
@@ -249,6 +325,11 @@ async function renderClienteForm(id = null) {
           style="margin-top:.5rem;display:${origenEsOtro ? 'block' : 'none'}" />
       </div>
       <div class="form-group"><label>Domicilio</label><input name="domicilio" value="${esc(cliente?.domicilio || '')}" /></div>
+
+      <h4 style="margin-top:1.5rem;margin-bottom:.5rem;color:#2980b9;font-size:1rem">Datos bancarios — para devoluciones si actúa como inversor</h4>
+      <div class="form-group"><label>CBU</label><input name="banco_cbu" value="${esc(cliente?.banco_cbu || '')}" placeholder="22 dígitos" /></div>
+      <div class="form-group"><label>Alias</label><input name="banco_alias" value="${esc(cliente?.banco_alias || '')}" placeholder="ej: juan.perez.mp" /></div>
+
       <div class="form-group"><label>Observaciones</label><textarea name="observaciones">${esc(cliente?.observaciones || '')}</textarea></div>
 
       <div class="form-group" style="margin-top:1.25rem">

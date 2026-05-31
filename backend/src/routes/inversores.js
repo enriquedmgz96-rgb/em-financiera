@@ -1,4 +1,6 @@
-// Inversores — quienes aportan capital. Espejo simétrico de clientes.js.
+// Inversores — alias de compatibilidad. Tras la unificación BP (migración 013) el
+// registro de personas es `clientes`; este router queda repuntado a esa tabla para
+// que `/api/inversores` siga respondiendo sin romper clientes que aún lo llamen.
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
@@ -6,7 +8,7 @@ const { validarCUIT } = require('../services/validaciones');
 
 router.get('/', async (req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM inversores ORDER BY apellido, nombre');
+    const { rows } = await pool.query('SELECT * FROM clientes ORDER BY apellido, nombre');
     res.json(rows);
   } catch (err) { next(err); }
 });
@@ -28,7 +30,7 @@ router.post('/', async (req, res, next) => {
     : (documentacion_presentada || '[]');
   try {
     const { rows } = await pool.query(
-      `INSERT INTO inversores
+      `INSERT INTO clientes
          (nombre, apellido, dni, cuit, telefono, email, domicilio,
           banco_cbu, banco_alias, origen, observaciones, documentacion_presentada)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
@@ -45,7 +47,7 @@ router.post('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM inversores WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Inversor no encontrado' });
     res.json(rows[0]);
   } catch (err) { next(err); }
@@ -65,7 +67,7 @@ router.put('/:id', async (req, res, next) => {
     : undefined;
   try {
     const { rows } = await pool.query(
-      `UPDATE inversores SET
+      `UPDATE clientes SET
          nombre                   = COALESCE($1, nombre),
          apellido                 = COALESCE($2, apellido),
          dni                      = COALESCE($3, dni),

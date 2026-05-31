@@ -78,7 +78,7 @@ async function renderCaptacionDetalle(id) {
     <div class="seccion-titulo">
       <h2>
         <span style="font-family:var(--font-mono);font-size:.82rem;font-weight:400;color:#888;display:block;margin-bottom:.2rem">
-          Legajo K-${String(c.id).padStart(4,'0')} · Inversor I-${String(c.id_inversor).padStart(4,'0')}
+          Legajo K-${String(c.id).padStart(4,'0')} · Socio S-${String(c.id_inversor).padStart(4,'0')}
         </span>
         ${esc(c.apellido)}, ${esc(c.nombre)}
         <span style="font-size:.75rem;font-weight:600;padding:.2rem .7rem;border-radius:12px;margin-left:.75rem;vertical-align:middle;${
@@ -153,7 +153,8 @@ async function renderCaptacionDetalle(id) {
 
 async function renderCaptacionForm(idInversorPreseleccionado = null) {
   const app = document.getElementById('app');
-  const inversores = await api.get('/inversores').catch(() => []);
+  // Registro unificado: el inversor es un socio (BP) del registro de personas.
+  const inversores = await api.get('/clientes').catch(() => []);
 
   const CUOTAS_OPTS = [1,2,3,4,5,6,7,8,9,10,11,12,18];
 
@@ -170,11 +171,12 @@ async function renderCaptacionForm(idInversorPreseleccionado = null) {
 
     <form id="formCaptacion" style="max-width:700px">
       <div class="form-group">
-        <label>Inversor *</label>
+        <label>Inversor (socio) *</label>
         <select name="id_inversor" required>
           <option value="">Seleccionar...</option>
-          ${inversores.map(i => `<option value="${i.id}" ${idInversorPreseleccionado == i.id ? 'selected' : ''}>${esc(i.apellido)}, ${esc(i.nombre)} — DNI ${esc(i.dni)} (I-${String(i.id).padStart(4,'0')})</option>`).join('')}
+          ${inversores.map(i => `<option value="${i.id}" ${idInversorPreseleccionado == i.id ? 'selected' : ''}>${esc(i.apellido)}, ${esc(i.nombre)} — DNI ${esc(i.dni)} (S-${String(i.id).padStart(4,'0')})</option>`).join('')}
         </select>
+        <small style="color:#888">¿No aparece? Cargalo primero en <strong>Socios</strong> y volvé acá.</small>
       </div>
 
       <div class="form-group">

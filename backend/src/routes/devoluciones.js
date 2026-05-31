@@ -205,7 +205,7 @@ router.get('/:id/recibo', async (req, res, next) => {
     const dev = devs[0];
     const { rows: caps } = await pool.query(
       `SELECT c.*, i.nombre, i.apellido, i.dni
-       FROM captaciones c JOIN inversores i ON i.id = c.id_inversor WHERE c.id = $1`,
+       FROM captaciones c JOIN clientes i ON i.id = c.id_inversor WHERE c.id = $1`,
       [dev.id_captacion]
     );
     if (caps.length === 0) return res.status(404).json({ error: 'Captación no encontrada' });
