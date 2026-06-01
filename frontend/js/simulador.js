@@ -14,33 +14,26 @@ async function renderSimuladorBase(modo) {
   window._simModo = modo;
   window._sistemaSimulador = 'flat';
 
-  // Préstamos usa el catálogo guardado de categorías; captaciones usa atajos
-  // fijos (los % típicos que se le pagan al inversor) + el campo editable.
-  let categoriasMensual = [], categoriasSemanal = [];
-  if (!esCapt) {
-    [categoriasMensual, categoriasSemanal] = await Promise.all([
-      api.get('/categorias?periodicidad=mensual').catch(() => []),
-      api.get('/categorias?periodicidad=semanal').catch(() => []),
-    ]);
-  }
+  // Cada módulo tiene su propio catálogo de categorías de tasa (por tipo):
+  // préstamos = lo que se le cobra al cliente; captaciones = lo que se le paga
+  // al inversor. Más el campo de tasa editable.
+  window._simTipo = modo; // 'prestamo' | 'captacion'
+  const [categoriasMensual, categoriasSemanal] = await Promise.all([
+    api.get(`/categorias?periodicidad=mensual&tipo=${modo}`).catch(() => []),
+    api.get(`/categorias?periodicidad=semanal&tipo=${modo}`).catch(() => []),
+  ]);
 
   const colorBadge = c => ({ verde: '#27ae60', amarillo: '#f39c12', rojo: '#e74c3c', azul: '#2980b9' }[c] || '#2980b9');
-  const chipsCapt = { mensual: [3, 4, 5], semanal: [1, 1.5, 2] };
+  const tasaDefault = esCapt ? 3 : 7.5;
   const accent = esCapt ? '#2980b9' : '#1b4332';
 
   // Estado de la simulación (cierre de este render; sólo hay un simulador activo)
   let _periodo = 'mensual';
-  let tasaSel = esCapt ? 3 : (categoriasMensual.length ? parseFloat(categoriasMensual[0].tasa_mensual) : 7.5);
+  let tasaSel = categoriasMensual.length ? parseFloat(categoriasMensual[0].tasa_mensual) : tasaDefault;
 
-  // Atajos de tasa (chips) según el periodo
+  // Atajos de tasa (chips) según el periodo, desde el catálogo del módulo
   const chipsHtml = (periodo) => {
     const unidad = periodo === 'semanal' ? 'semanal' : 'mensual';
-    if (esCapt) {
-      return chipsCapt[periodo].map((t, i) => `
-        <button type="button" onclick="simSelTasa(${t}, this)"
-          style="border:2px solid #2980b9;background:${i === 0 ? '#2980b9' : 'white'};color:${i === 0 ? 'white' : '#2980b9'};padding:.4rem 1rem;border-radius:20px;cursor:pointer;font-weight:600;font-family:inherit">
-          ${t}% ${unidad}</button>`).join('');
-    }
     const cats = periodo === 'semanal' ? categoriasSemanal : categoriasMensual;
     return cats.map((c, i) => `
       <button type="button" onclick="simSelTasa(${parseFloat(c.tasa_mensual)}, this)"
@@ -49,10 +42,10 @@ async function renderSimuladorBase(modo) {
       || '<span style="color:#888;font-size:.85rem">Sin categorías configuradas — usá el campo de tasa</span>';
   };
 
-  // Administrar categorías de tasa: sólo en el simulador de préstamos
-  const adminCatsHtml = esCapt ? '' : `
+  // Administrar categorías de tasa: cada módulo gestiona las suyas
+  const adminCatsHtml = `
     <div style="margin-top:2rem;border-top:1px solid #eee;padding-top:1rem">
-      <h4 style="margin-bottom:.75rem;color:#666;font-size:.9rem">Administrar categorías de tasa</h4>
+      <h4 style="margin-bottom:.75rem;color:#666;font-size:.9rem">Administrar categorías de tasa ${esCapt ? '(inversores)' : '(préstamos)'}</h4>
       <div style="margin-bottom:.5rem;font-size:.8rem;font-weight:600;color:#1b4332">Mensuales</div>
       <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.75rem">
         ${categoriasMensual.map(c => `
@@ -178,12 +171,8 @@ async function renderSimuladorBase(modo) {
     if (uni) uni.textContent = isSem ? '% semanal' : '% mensual';
 
     document.getElementById('btnsCategorias').innerHTML = chipsHtml(p);
-    if (esCapt) {
-      tasaSel = chipsCapt[p][0];
-    } else {
-      const cats = isSem ? categoriasSemanal : categoriasMensual;
-      tasaSel = cats.length ? parseFloat(cats[0].tasa_mensual) : (isSem ? 3 : 7.5);
-    }
+    const cats = isSem ? categoriasSemanal : categoriasMensual;
+    tasaSel = cats.length ? parseFloat(cats[0].tasa_mensual) : tasaDefault;
     const inp = document.getElementById('tasaCustom');
     if (inp) inp.value = tasaSel;
     reSimular();
@@ -211,6 +200,11 @@ async function renderSimuladorBase(modo) {
 
 function renderSimuladorPrestamos() { return renderSimuladorBase('prestamo'); }
 function renderSimuladorCaptaciones() { return renderSimuladorBase('captacion'); }
+
+// Re-renderiza el simulador activo (para refrescar tras un alta/edición de tasa)
+function _refrescarSimulador() {
+  return (window._simModo === 'captacion') ? renderSimuladorCaptaciones() : renderSimuladorPrestamos();
+}
 
 function calcPMT(capital, tasa, n) {
   const r = tasa / 100;
@@ -292,8 +286,8 @@ async function nuevaCategoria(periodicidad = 'mensual') {
   if (!tasa || isNaN(tasa)) { alert('Tasa inválida'); return; }
   const color = prompt('Color (verde / amarillo / rojo / azul):', 'azul');
   try {
-    await api.post('/categorias', { nombre, tasa_mensual: parseFloat(tasa), color: color || 'azul', periodicidad });
-    renderSimuladorPrestamos();
+    await api.post('/categorias', { nombre, tasa_mensual: parseFloat(tasa), color: color || 'azul', periodicidad, tipo: window._simTipo || 'prestamo' });
+    _refrescarSimulador();
   } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
@@ -306,7 +300,7 @@ async function editarCategoria(id, nombreActual, tasaActual, colorActual, period
   if (!confirm(`¿Guardar cambios en "${nombre}" con tasa ${tasa}%?`)) return;
   try {
     await api.put(`/categorias/${id}`, { nombre, tasa_mensual: parseFloat(tasa) });
-    renderSimuladorPrestamos();
+    _refrescarSimulador();
   } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 
@@ -314,7 +308,7 @@ async function eliminarCategoria(id) {
   if (!confirm('¿Eliminar esta categoría?')) return;
   try {
     await api.delete(`/categorias/${id}`);
-    renderSimuladorPrestamos();
+    _refrescarSimulador();
   } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }
 

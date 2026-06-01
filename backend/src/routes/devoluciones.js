@@ -75,7 +75,11 @@ router.post('/', async (req, res, next) => {
       // VALIDACIONES DE NEGOCIO — solo para la devolución recién insertada
       if (d.id === devInsertada.id) {
         const interesPeriodo = resultado.interesPagado;
-        const cuotaCompleta  = cuotaBase + interesPeriodo;
+        // Francés: valor_cuota_base YA es el PMT (capital + interés). Flat/alemán:
+        // cuotaBase es sólo la porción de capital, así que hay que sumarle el interés.
+        const cuotaCompleta  = tipoAmortizacion === 'frances'
+          ? cuotaBase
+          : cuotaBase + interesPeriodo;
         const monto = parseFloat(d.monto_pagado);
         const tol = 1;
         if (d.tipo_pago === 'adelanto_parcial' && monto < interesPeriodo - tol) {

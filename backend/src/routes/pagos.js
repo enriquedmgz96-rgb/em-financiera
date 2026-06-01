@@ -71,7 +71,11 @@ router.post('/', async (req, res, next) => {
       // VALIDACIONES DE NEGOCIO — solo para el pago recién insertado
       if (pg.id === pagoInsertado.id) {
         const interesPeriodo = resultado.interesPagado;
-        const cuotaCompleta  = cuotaBase + interesPeriodo;
+        // Francés: valor_cuota_base YA es el PMT (capital + interés). Flat/alemán:
+        // cuotaBase es sólo la porción de capital, así que hay que sumarle el interés.
+        const cuotaCompleta  = tipoAmortizacion === 'frances'
+          ? cuotaBase
+          : cuotaBase + interesPeriodo;
         const monto = parseFloat(pg.monto_pagado);
         const tol = 1; // tolerancia $1 por redondeos
         if (pg.tipo_pago === 'adelanto_parcial' && monto < interesPeriodo - tol) {
@@ -146,8 +150,9 @@ router.delete('/:id', async (req, res, next) => {
     const idPrestamo = rows[0].id_prestamo;
     await client.query('DELETE FROM pagos WHERE id = $1', [req.params.id]);
 
-    // Replay tras la eliminación
-    const { rows: [prestamo] } = await client.query('SELECT * FROM prestamos WHERE id = $1', [idPrestamo]);
+    // Replay tras la eliminación. Lock del préstamo para evitar races con un
+    // POST simultáneo sobre el mismo préstamo (simétrico con devoluciones.js).
+    const { rows: [prestamo] } = await client.query('SELECT * FROM prestamos WHERE id = $1 FOR UPDATE', [idPrestamo]);
     const { rows: restantes } = await client.query(
       'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [idPrestamo]
     );
