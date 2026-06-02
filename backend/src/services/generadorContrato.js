@@ -117,6 +117,16 @@ async function generarContratoMutuo(prestamo) {
     domicilio: prestamo.domicilio_garantia || '—',
   };
 
+  // ¿El préstamo lleva garante / codeudor? Default true (préstamos existentes).
+  const requiereGarantia = prestamo.requiere_garantia !== false && prestamo.requiere_garantia !== 'false';
+  const yCod      = requiereGarantia ? ' y sus codeudores' : '';
+  const seObligan = requiereGarantia ? 'se obligan' : 'se obliga';
+
+  // Numeración correlativa de cláusulas (al omitir el garante, no quedan saltos).
+  const ORDINALES = ['PRIMERO','SEGUNDO','TERCERO','CUARTO','QUINTO','SEXTO','SÉPTIMO','OCTAVO','NOVENO','DÉCIMO'];
+  let _ord = 0;
+  const ord = () => `${ORDINALES[_ord++]}: `;
+
   const children = [
     // Título
     p('CONTRATO DE MUTUO', { bold: true, center: true, size: 28, after: 240 }),
@@ -149,32 +159,35 @@ async function generarContratoMutuo(prestamo) {
     ]),
 
     pMixed([
-      { text: 'PRIMERO: ', bold: true, underline: true },
+      { text: ord(), bold: true, underline: true },
       { text: `El acreedor entrega, "al deudor", en este acto, en calidad de mutuo, la cantidad de ` },
       { text: `PESOS ${capitalLetras.toUpperCase()} ($ ${fmtMonto(capital)})`, bold: true },
       { text: `, quien lo recibe a entera conformidad y satisfacción, sirviendo la firma del presente de suficiente recibo y carta de adeudo en forma.` },
     ]),
 
     pMixed([
-      { text: 'SEGUNDO: ', bold: true, underline: true },
+      { text: ord(), bold: true, underline: true },
       { text: `De común acuerdo entre acreedor y "el deudor" se conviene que el capital solicitado y adeudado devengará, a cargo "del deudor", por la espera en la devolución, una tasa por servicio del ` },
       { text: `${tasa}% efectivo ${periodo} directo`, bold: true },
       { text: `.` },
     ]),
 
     pMixed([
-      { text: 'TERCERO: ', bold: true, underline: true },
+      { text: ord(), bold: true, underline: true },
       { text: `"El deudor" se obliga y compromete a devolver y/o restituir al "acreedor", la suma recibida en calidad de mutuo, de la siguiente manera, a saber: en ` },
       { text: `${cuotas} cuotas ${periodoAdj}`, bold: true },
       { text: `, iguales y consecutivas de ` },
       { text: `PESOS ${cuotaLetras.toUpperCase()} ($ ${fmtMonto(cuotaTotal)})`, bold: true },
       { text: ` cada una, venciendo la primera el día ` },
       { text: fmtVcto, bold: true },
-      { text: ` y las restantes en igual día de los ${periodoSig}. Cuando dicho/s vencimiento/s coincidieren con un día inhábil, la/s cuota/s deberá/n ser pagada/s el primer día hábil siguiente, sin que ello altere el término de los vencimientos posteriores. Acuerdan expresamente las partes firmantes que la/s cuota/s estipulada/s precedentemente incluye/n: capital y tasa por servicio. Suscribe "el deudor" y sus codeudores un pagaré "SIN PROTESTO" (Art. 50 Decreto-Ley 5965/63), en garantía del cumplimiento de las obligaciones asumidas a través del presente contrato, considerándoselo parte integrante del presente instrumento.` },
+      { text: ` y las restantes en igual día de los ${periodoSig}. Cuando dicho/s vencimiento/s coincidieren con un día inhábil, la/s cuota/s deberá/n ser pagada/s el primer día hábil siguiente, sin que ello altere el término de los vencimientos posteriores. Acuerdan expresamente las partes firmantes que la/s cuota/s estipulada/s precedentemente incluye/n: capital y tasa por servicio. Suscribe "el deudor"${yCod} un pagaré "SIN PROTESTO" (Art. 50 Decreto-Ley 5965/63), en garantía del cumplimiento de las obligaciones asumidas a través del presente contrato, considerándoselo parte integrante del presente instrumento.` },
     ]),
+  ];
 
-    pMixed([
-      { text: 'CUARTO: ', bold: true, underline: true },
+  // CUARTA cláusula: sólo si el préstamo lleva garante / codeudor.
+  if (requiereGarantia) {
+    children.push(pMixed([
+      { text: ord(), bold: true, underline: true },
       { text: `Presente en este acto el/la Sr/a. ` },
       { text: garante.nombre, bold: true },
       { text: `, DNI: ` },
@@ -184,34 +197,36 @@ async function generarContratoMutuo(prestamo) {
       { text: `, con domicilio en ` },
       { text: garante.domicilio, bold: true },
       { text: `, suscribe/n el presente constituyéndose en "codeudor solidario, liso, llano y principal pagador" de todas y cada una de las obligaciones asumidas por "el deudor" emergentes del presente contrato, renunciando expresamente a los beneficios de excusión, división de los bienes e interpelación previa "del deudor".` },
-    ]),
+    ]));
+  }
 
+  children.push(
     pMixed([
-      { text: 'QUINTO: ', bold: true, underline: true },
+      { text: ord(), bold: true, underline: true },
       { text: `El pago de la/s cuota/s pactada/s precedentemente deberá efectuarse en el domicilio del acreedor, sito en calle ` },
       { text: `${ACREEDOR.domicilio} de la localidad de ${ACREEDOR.localidad}`, bold: true },
       { text: `, o donde éste lo indicare en lo sucesivo.` },
     ]),
 
     pMixed([
-      { text: 'SEXTO: ', bold: true, underline: true },
-      { text: `Dado el hecho de haber "el deudor" y sus codeudores suscripto un pagaré "SIN PROTESTO" (Art. 50 Decreto-Ley 5965/63) en garantía del cumplimiento de la obligación asumida, y atento a que el lugar de pago es el domicilio del "acreedor" (` },
+      { text: ord(), bold: true, underline: true },
+      { text: `Dado el hecho de haber "el deudor"${yCod} suscripto un pagaré "SIN PROTESTO" (Art. 50 Decreto-Ley 5965/63) en garantía del cumplimiento de la obligación asumida, y atento a que el lugar de pago es el domicilio del "acreedor" (` },
       { text: `${ACREEDOR.domicilio} — ${ACREEDOR.localidad}`, bold: true },
-      { text: `), se considerará presentado el pagaré para el cobro en cada uno de los días pactados como vencimiento de cada cuota, obligándose "el deudor" y sus codeudores a concurrir en tales fechas al domicilio del "acreedor".` },
+      { text: `), se considerará presentado el pagaré para el cobro en cada uno de los días pactados como vencimiento de cada cuota, obligándose "el deudor"${yCod} a concurrir en tales fechas al domicilio del "acreedor".` },
     ]),
 
     pMixed([
-      { text: 'SÉPTIMO: ', bold: true, underline: true },
-      { text: `La falta de pago en término de una cualquiera de las cuotas estipuladas hará incurrir "al deudor" en mora automática, de pleno derecho y sin necesidad de interpelación previa, produciéndose la caducidad total de todos los términos otorgados. Para el supuesto de mora, "el deudor" y sus codeudores se obligan a pagar una tasa punitoria equivalente al cincuenta por ciento (50%) adicional sobre la tasa pactada, calculada desde la fecha de mora hasta el efectivo pago total.` },
+      { text: ord(), bold: true, underline: true },
+      { text: `La falta de pago en término de una cualquiera de las cuotas estipuladas hará incurrir "al deudor" en mora automática, de pleno derecho y sin necesidad de interpelación previa, produciéndose la caducidad total de todos los términos otorgados. Para el supuesto de mora, "el deudor"${yCod} ${seObligan} a pagar una tasa punitoria equivalente al cincuenta por ciento (50%) adicional sobre la tasa pactada, calculada desde la fecha de mora hasta el efectivo pago total.` },
     ]),
 
     pMixed([
-      { text: 'OCTAVO: ', bold: true, underline: true },
-      { text: `Todos los gastos, comisiones, sellados, tasas e impuestos actuales y/o a crearse que graven este contrato y el pagaré que lo integra, serán a cargo y costo exclusivo "del deudor" y sus codeudores.` },
+      { text: ord(), bold: true, underline: true },
+      { text: `Todos los gastos, comisiones, sellados, tasas e impuestos actuales y/o a crearse que graven este contrato y el pagaré que lo integra, serán a cargo y costo exclusivo "del deudor"${yCod}.` },
     ]),
 
     pMixed([
-      { text: 'NOVENO: ', bold: true, underline: true },
+      { text: ord(), bold: true, underline: true },
       { text: `Para todos los efectos contractuales, legales y judiciales emergentes del presente contrato, las partes fijan domicilio en los denunciados precedentemente, acordando voluntariamente someterse en caso de litigio judicial a la jurisdicción ordinaria de los Tribunales de la ciudad de ` },
       { text: 'Arroyito', bold: true },
       { text: `, renunciando al fuero Federal y a todo otro que pudiere corresponderles.` },
@@ -221,7 +236,7 @@ async function generarContratoMutuo(prestamo) {
 
     p(`ARROYITO (Pcia. de Córdoba), ${dia} de ${mes} de ${anio}.`, { center: true, bold: true, after: 480 }),
 
-    // Firmas
+    // Firmas acreedor / deudor
     pMixed([
       { text: '______________________________          ______________________________' },
     ], { center: true, after: 80 }),
@@ -230,18 +245,25 @@ async function generarContratoMutuo(prestamo) {
     ], { center: true, after: 80 }),
     pMixed([
       { text: `      DNI: ${ACREEDOR.dni}                               DNI: ${deudor.dni}` },
-    ], { center: true, after: 480 }),
+    ], { center: true, after: requiereGarantia ? 480 : 640 }),
+  );
 
-    pMixed([
-      { text: '______________________________' },
-    ], { center: true, after: 80 }),
-    pMixed([
-      { text: `      CODEUDOR: ${garante.nombre}` },
-    ], { center: true, after: 80 }),
-    pMixed([
-      { text: `      DNI: ${garante.dni}` },
-    ], { center: true, after: 640 }),
+  // Firma del codeudor: sólo si lleva garante.
+  if (requiereGarantia) {
+    children.push(
+      pMixed([
+        { text: '______________________________' },
+      ], { center: true, after: 80 }),
+      pMixed([
+        { text: `      CODEUDOR: ${garante.nombre}` },
+      ], { center: true, after: 80 }),
+      pMixed([
+        { text: `      DNI: ${garante.dni}` },
+      ], { center: true, after: 640 }),
+    );
+  }
 
+  children.push(
     // Separador pagaré
     p('— — — — — — — — — — — — — — — — — — — — — — — — — CORTAR AQUÍ — — — — — — — — — — — — — — — — — — — — — — — — —', { center: true, size: 18, after: 320 }),
 
@@ -263,17 +285,34 @@ async function generarContratoMutuo(prestamo) {
       { text: `PESOS ${capitalLetras.toUpperCase()} ($ ${fmtMonto(capital)})`, bold: true },
       { text: ` por igual valor recibido en este acto en calidad de préstamo de dinero. Acepto/amos la jurisdicción de los tribunales ordinarios de la ciudad de Arroyito, renunciando expresamente al fuero federal o a cualquier excepción que pudiere corresponder.` },
     ], { after: 480 }),
+  );
 
-    pMixed([
-      { text: 'DEUDOR: ______________________________          CODEUDOR: ______________________________' },
-    ], { center: true, after: 80 }),
-    pMixed([
-      { text: `DNI: ${deudor.dni}                                              DNI: ${garante.dni}` },
-    ], { center: true, after: 80 }),
-    pMixed([
-      { text: `DOMICILIO: ${deudor.domicilio}          DOMICILIO: ${garante.domicilio}` },
-    ], { center: true }),
-  ];
+  // Firmas del pagaré: con o sin codeudor.
+  if (requiereGarantia) {
+    children.push(
+      pMixed([
+        { text: 'DEUDOR: ______________________________          CODEUDOR: ______________________________' },
+      ], { center: true, after: 80 }),
+      pMixed([
+        { text: `DNI: ${deudor.dni}                                              DNI: ${garante.dni}` },
+      ], { center: true, after: 80 }),
+      pMixed([
+        { text: `DOMICILIO: ${deudor.domicilio}          DOMICILIO: ${garante.domicilio}` },
+      ], { center: true }),
+    );
+  } else {
+    children.push(
+      pMixed([
+        { text: 'DEUDOR: ______________________________' },
+      ], { center: true, after: 80 }),
+      pMixed([
+        { text: `DNI: ${deudor.dni}` },
+      ], { center: true, after: 80 }),
+      pMixed([
+        { text: `DOMICILIO: ${deudor.domicilio}` },
+      ], { center: true }),
+    );
+  }
 
   const doc = new Document({
     sections: [{

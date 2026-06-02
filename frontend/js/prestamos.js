@@ -276,11 +276,20 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
         <label style="display:inline-flex;align-items:center;margin-right:1.5rem"><input type="checkbox" name="contrato_firmado" value="true" style="width:auto;margin-right:.4rem" /> Contrato de mutuo firmado</label>
         <label style="display:inline-flex;align-items:center"><input type="checkbox" name="pagare_firmado" value="true" style="width:auto;margin-right:.4rem" /> Pagarés firmados</label>
       </div>
-      <div class="form-group"><label>Nombre garantía</label><input name="nombre_garantia" /></div>
-      <div class="form-group"><label>Teléfono garantía</label><input name="telefono_garantia" /></div>
-      <div class="form-group"><label>DNI garantía</label><input name="dni_garantia" /></div>
-      <div class="form-group"><label>CUIL garantía *</label><input name="cuil_garantia" required /></div>
-      <div class="form-group"><label>Domicilio garantía *</label><input name="domicilio_garantia" required /></div>
+      <div class="form-group" style="border-top:1px solid #eee;padding-top:.8rem">
+        <label style="display:inline-flex;align-items:center;font-weight:600">
+          <input type="checkbox" name="requiere_garantia" id="chkGarantia" value="true" checked style="width:auto;margin-right:.4rem" />
+          Este préstamo lleva garante / codeudor
+        </label>
+        <small style="color:#888;display:block;margin-top:.3rem">Si lo destildás, el contrato de mutuo se genera sin la cláusula del codeudor y no se piden los datos del garante.</small>
+      </div>
+      <div id="bloqueGarantia">
+        <div class="form-group"><label>Nombre garantía</label><input name="nombre_garantia" /></div>
+        <div class="form-group"><label>Teléfono garantía</label><input name="telefono_garantia" /></div>
+        <div class="form-group"><label>DNI garantía</label><input name="dni_garantia" /></div>
+        <div class="form-group"><label>CUIL garantía *</label><input name="cuil_garantia" id="inpCuilGarantia" required /></div>
+        <div class="form-group"><label>Domicilio garantía *</label><input name="domicilio_garantia" id="inpDomicilioGarantia" required /></div>
+      </div>
       <div class="form-group"><label>Observaciones</label><textarea name="observaciones"></textarea></div>
 
       <div id="proyeccion" style="margin:1rem 0"></div>
@@ -468,11 +477,25 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
   document.getElementById('btnMensual').addEventListener('click', () => cambiarPeriodo('mensual'));
   document.getElementById('btnSemanal').addEventListener('click', () => cambiarPeriodo('semanal'));
 
+  // Mostrar/ocultar los datos del garante según el préstamo lleve o no codeudor
+  const chkGarantia = document.getElementById('chkGarantia');
+  const toggleGarantia = () => {
+    const lleva = chkGarantia.checked;
+    document.getElementById('bloqueGarantia').style.display = lleva ? '' : 'none';
+    const cuil = document.getElementById('inpCuilGarantia');
+    const dom  = document.getElementById('inpDomicilioGarantia');
+    cuil.required = lleva;
+    dom.required  = lleva;
+    if (!lleva) { cuil.value = ''; dom.value = ''; }
+  };
+  chkGarantia.addEventListener('change', toggleGarantia);
+
   document.getElementById('formPrestamo').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(e.target).entries());
     fd.pagare_firmado = fd.pagare_firmado === 'true';
     fd.contrato_firmado = fd.contrato_firmado === 'true';
+    fd.requiere_garantia = fd.requiere_garantia === 'true';
     const msg = document.getElementById('formMsg');
     try {
       await api.post('/prestamos', fd);

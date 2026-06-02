@@ -33,9 +33,10 @@ router.post('/', async (req, res, next) => {
     total_cuotas, primer_vencimiento, pagare_firmado,
     nombre_garantia, telefono_garantia, dni_garantia, cuil_garantia, domicilio_garantia,
     observaciones, periodicidad, motivo,
-    tipo_amortizacion, contrato_firmado
+    tipo_amortizacion, contrato_firmado, requiere_garantia
   } = req.body;
   const _periodicidad = periodicidad || 'mensual';
+  const _requiereGarantia = requiere_garantia === undefined ? true : !!requiere_garantia;
   if (!id_cliente || !monto_capital || !tasa_interes_mensual || !total_cuotas || !primer_vencimiento) {
     return res.status(400).json({ error: 'Faltan campos requeridos: id_cliente, monto_capital, tasa_interes_mensual, total_cuotas, primer_vencimiento' });
   }
@@ -51,15 +52,15 @@ router.post('/', async (req, res, next) => {
          (id_cliente, moneda, monto_capital, tasa_interes_mensual, total_cuotas,
           valor_cuota_base, primer_vencimiento, periodicidad, estado, pagare_firmado, motivo,
           nombre_garantia, telefono_garantia, dni_garantia, cuil_garantia, domicilio_garantia,
-          observaciones, tipo_amortizacion, contrato_firmado,
+          observaciones, tipo_amortizacion, contrato_firmado, requiere_garantia,
           creado_por_id, creado_por_nombre)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'activo',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'activo',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
       [id_cliente, moneda || 'ARS', monto_capital, tasa_interes_mensual, total_cuotas,
         valor_cuota_base, primer_vencimiento, _periodicidad, pagare_firmado || false, motivo || null,
         nombre_garantia || null, telefono_garantia || null, dni_garantia || null,
         cuil_garantia || null, domicilio_garantia || null,
         observaciones || null,
-        tipoAmort, contrato_firmado || false, req.user?.id || null, req.user?.nombre || req.user?.username || null]
+        tipoAmort, contrato_firmado || false, _requiereGarantia, req.user?.id || null, req.user?.nombre || req.user?.username || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -92,16 +93,18 @@ router.get('/:id', async (req, res, next) => {
 });
 
 router.put('/:id', async (req, res, next) => {
-  const { estado, pagare_firmado, observaciones, contrato_firmado } = req.body;
+  const { estado, pagare_firmado, observaciones, contrato_firmado, requiere_garantia } = req.body;
   try {
     const { rows } = await pool.query(
       `UPDATE prestamos SET
-         estado           = COALESCE($1, estado),
-         pagare_firmado   = COALESCE($2, pagare_firmado),
-         observaciones    = COALESCE($3, observaciones),
-         contrato_firmado = COALESCE($5, contrato_firmado)
+         estado            = COALESCE($1, estado),
+         pagare_firmado    = COALESCE($2, pagare_firmado),
+         observaciones     = COALESCE($3, observaciones),
+         contrato_firmado  = COALESCE($5, contrato_firmado),
+         requiere_garantia = COALESCE($6, requiere_garantia)
        WHERE id = $4 RETURNING *`,
-      [estado, pagare_firmado, observaciones, req.params.id, contrato_firmado]
+      [estado, pagare_firmado, observaciones, req.params.id, contrato_firmado,
+       requiere_garantia === undefined ? null : requiere_garantia]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Préstamo no encontrado' });
     res.json(rows[0]);
