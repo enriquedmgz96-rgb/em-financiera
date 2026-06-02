@@ -476,6 +476,10 @@ textarea {
 }
 
 input[type="checkbox"] {
+  /* La regla general pone appearance:none (para inputs/select); hay que
+     restaurarla acá o el checkbox no muestra el tilde al marcarse. */
+  appearance: auto;
+  -webkit-appearance: checkbox;
   width: 16px;
   height: 16px;
   accent-color: var(--verde);

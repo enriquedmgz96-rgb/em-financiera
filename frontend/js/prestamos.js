@@ -273,7 +273,7 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
         </select>
       </div>
       <div class="form-group">
-        <label><input type="checkbox" name="pagare_firmado" value="true" style="width:auto;margin-right:.4rem" /> Pagaré firmado</label>
+        <label><input type="checkbox" name="pagare_firmado" value="true" style="width:auto;margin-right:.4rem" /> Contrato de mutuo firmado</label>
       </div>
       <div class="form-group"><label>Nombre garantía</label><input name="nombre_garantia" /></div>
       <div class="form-group"><label>Teléfono garantía</label><input name="telefono_garantia" /></div>
