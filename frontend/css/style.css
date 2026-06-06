@@ -642,6 +642,7 @@ main > *:nth-child(4) { animation-delay: 0.12s; }
     transform: translateX(-100%);
     transition: transform 0.22s ease;
     box-shadow: var(--shadow-md);
+    z-index: 199;            /* por encima del overlay (198) para poder tocar las opciones */
   }
   .sidebar.open { transform: translateX(0); }
   .sidebar-user { display: flex; }
