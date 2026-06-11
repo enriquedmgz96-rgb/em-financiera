@@ -45,7 +45,17 @@ async function renderDevolucionForm(captacionId) {
     : Math.min(saldo, cuotaBase);
   const cuotaCompleta = parseFloat((capitalEstaCuota + interes).toFixed(2));
   const esUltimaCuota = saldo < cuotaBase;
-  const nroCuotaActual = c.devoluciones.length + 1;
+  // La cuota que se está devolviendo = cantidad de cuotas completas ya devueltas + 1
+  const cuotasCompletasPagadas = c.devoluciones.filter(d => d.tipo_pago === 'cuota_completa').length;
+  const nroCuotaActual = cuotasCompletasPagadas + 1;
+  const _fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
+  const venceEstaCuota = (() => {
+    const dt = _fechaSolo(c.primer_vencimiento);
+    if (c.periodicidad === 'semanal') dt.setDate(dt.getDate() + (nroCuotaActual - 1) * 7);
+    else dt.setMonth(dt.getMonth() + (nroCuotaActual - 1));
+    return dt;
+  })();
+  const venceEstaCuotaStr = venceEstaCuota.toLocaleDateString('es-AR');
 
   app.innerHTML = `
     <div class="seccion-titulo">
@@ -56,7 +66,7 @@ async function renderDevolucionForm(captacionId) {
     <div style="background:${esUltimaCuota ? 'var(--gold-light)' : 'var(--verde-tint)'};border-left:3px solid ${esUltimaCuota ? 'var(--gold)' : 'var(--verde-mid)'};padding:.65rem 1rem;border-radius:var(--radius);margin-bottom:1.25rem;font-size:.875rem;color:var(--ink-2)">
       ${esUltimaCuota
         ? `<strong>Última cuota</strong> — Resta menos de una cuota completa. El monto sugerido es el saldo total con intereses.`
-        : `Registrando <strong>${c.periodicidad === 'semanal' ? 'semana' : 'cuota'} ${nroCuotaActual} de ${c.total_cuotas}</strong>`
+        : `Registrando <strong>${c.periodicidad === 'semanal' ? 'semana' : 'cuota'} ${nroCuotaActual} de ${c.total_cuotas}</strong> — vence el <strong>${venceEstaCuotaStr}</strong>`
       }
       ${c.banco_cbu ? `<br><span style="font-size:.78rem;color:#666">💳 CBU del inversor: <code>${esc(c.banco_cbu)}</code> ${c.banco_alias ? `· Alias: <code>${esc(c.banco_alias)}</code>` : ''}</span>` : ''}
     </div>

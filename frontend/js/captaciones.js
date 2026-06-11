@@ -74,6 +74,36 @@ async function renderCaptacionDetalle(id) {
     return '<span class="badge" style="background:#d5f5e3;color:#27ae60">Cuota completa</span>';
   };
 
+  // ── Número de cuota + si se devolvió adelantado / en término / con atraso ──
+  const fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
+  const esSemanal = c.periodicidad === 'semanal';
+  const venceCuota = n => {
+    const dt = fechaSolo(c.primer_vencimiento);
+    if (esSemanal) dt.setDate(dt.getDate() + (n - 1) * 7);
+    else dt.setMonth(dt.getMonth() + (n - 1));
+    return dt;
+  };
+  const cronologico = [...c.devoluciones].sort((a, b) => {
+    const fa = String(a.fecha_pago_real), fb = String(b.fecha_pago_real);
+    return fa < fb ? -1 : fa > fb ? 1 : (a.id - b.id);
+  });
+  const cuotaDe = {};
+  let _cc = 0;
+  cronologico.forEach(d => { if (d.tipo_pago === 'cuota_completa') cuotaDe[d.id] = ++_cc; });
+
+  const sello = (d, n) => {
+    if (!d.fecha_pago_real) return '';
+    const dias = Math.round((fechaSolo(d.fecha_pago_real) - venceCuota(n)) / 86400000);
+    if (dias <= -1) return `<span style="color:#27ae60;font-weight:600">🟢 adelantado ${-dias}d</span>`;
+    if (dias === 0) return `<span style="color:#888;font-weight:600">⚪ en término</span>`;
+    return `<span style="color:#c0392b;font-weight:600">🔴 ${dias}d tarde</span>`;
+  };
+  const infoCuota = d => {
+    const n = cuotaDe[d.id];
+    if (!n) return '';
+    return `<div style="font-size:.72rem;color:#888;margin-top:.25rem;white-space:nowrap">Cuota ${n}/${c.total_cuotas} · ${sello(d, n)} <span style="color:#aaa">(vencía ${venceCuota(n).toLocaleDateString('es-AR')})</span></div>`;
+  };
+
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>
@@ -125,7 +155,7 @@ async function renderCaptacionDetalle(id) {
           <tr>
             <td>${String(d.fecha_pago_real).split('T')[0].split('-').reverse().join('/')}</td>
             <td style="font-size:.8rem;color:#999">${new Date(d.fecha_registro).toLocaleDateString('es-AR')}</td>
-            <td>${labelTipo(d)}</td>
+            <td>${labelTipo(d)}${infoCuota(d)}</td>
             <td>${esc(d.forma_pago || 'transferencia')}</td>
             <td>$${fmt(d.monto_pagado)}</td>
             <td>$${fmt(d.capital_amortizado)}</td>
