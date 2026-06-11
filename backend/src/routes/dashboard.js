@@ -36,31 +36,35 @@ router.get('/', async (req, res, next) => {
       ) amort ON amort.id_prestamo = p.id
       WHERE p.${VIVOS}
     `);
+    // La mora se mide por el CAPITAL realmente pagado, no por cuántos pagos se
+    // etiquetaron "cuota completa". Cuotas cubiertas = total - cuotas que faltan
+    // (MIN(cuotas_restantes_post_pago) = estado actual; sin pagos → faltan todas).
+    // Así un cliente que paga adelantos o de más NO cae en mora falsa.
     const { rows: mora } = await pool.query(`
       SELECT p.id, p.monto_capital, p.primer_vencimiento,
              c.nombre, c.apellido, c.dni, c.telefono,
-             COUNT(pg.id) FILTER (WHERE pg.tipo_pago = 'cuota_completa') AS nro_pagos,
-             TO_CHAR((p.primer_vencimiento + (COUNT(pg.id) FILTER (WHERE pg.tipo_pago = 'cuota_completa') * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date, 'DD/MM/YYYY') AS proximo_vencimiento
+             (p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) AS nro_pagos,
+             TO_CHAR((p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM prestamos p
       JOIN clientes c ON c.id = p.id_cliente
       LEFT JOIN pagos pg ON pg.id_prestamo = p.id
-      WHERE p.estado = 'activo'
+      WHERE p.estado IN ('activo','mora')
       GROUP BY p.id, c.id
-      HAVING (p.primer_vencimiento + (COUNT(pg.id) FILTER (WHERE pg.tipo_pago = 'cuota_completa') * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date < CURRENT_DATE
+      HAVING (p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date < CURRENT_DATE
     `);
     const { rows: proximos } = await pool.query(`
       SELECT p.id, p.monto_capital, p.tasa_interes_mensual, p.valor_cuota_base,
              p.primer_vencimiento, c.nombre, c.apellido, c.dni, c.telefono,
-             COUNT(pg.id) FILTER (WHERE pg.tipo_pago = 'cuota_completa') AS nro_pagos,
-             TO_CHAR((p.primer_vencimiento + (COUNT(pg.id) FILTER (WHERE pg.tipo_pago = 'cuota_completa') * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date, 'DD/MM/YYYY') AS proximo_vencimiento
+             (p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) AS nro_pagos,
+             TO_CHAR((p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM prestamos p
       JOIN clientes c ON c.id = p.id_cliente
       LEFT JOIN pagos pg ON pg.id_prestamo = p.id
-      WHERE p.estado = 'activo'
+      WHERE p.estado IN ('activo','mora')
       GROUP BY p.id, c.id
-      HAVING (p.primer_vencimiento + (COUNT(pg.id) FILTER (WHERE pg.tipo_pago = 'cuota_completa') * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date
+      HAVING (p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date
              BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-      ORDER BY (p.primer_vencimiento + (COUNT(pg.id) FILTER (WHERE pg.tipo_pago = 'cuota_completa') * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date
+      ORDER BY (p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date
     `);
     // ===== MÓDULO PLATA DE TERCEROS =====
     // Mismo filtro de "vivas" (activas + mora) para que la matemática cierre.
