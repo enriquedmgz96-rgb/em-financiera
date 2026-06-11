@@ -7,10 +7,12 @@ const { generarRecibo } = require('../services/generadorPDF');
 const TIPOS_VALIDOS = ['cuota_completa', 'solo_interes', 'adelanto_parcial'];
 
 router.post('/', async (req, res, next) => {
-  const { id_prestamo, monto_pagado, tipo_pago, observaciones, fecha_pago_real, forma_pago } = req.body;
+  const { id_prestamo, monto_pagado, tipo_pago, observaciones, fecha_pago_real, forma_pago, interes_mora } = req.body;
   if (!id_prestamo || !monto_pagado || !tipo_pago) {
     return res.status(400).json({ error: 'id_prestamo, monto_pagado y tipo_pago son requeridos' });
   }
+  // Recargo punitorio por mora (opcional, se cobra aparte del capital/interés)
+  const moraNum = Math.max(0, parseFloat(interes_mora) || 0);
   if (!fecha_pago_real) {
     return res.status(400).json({ error: 'fecha_pago_real es requerida' });
   }
@@ -41,10 +43,10 @@ router.post('/', async (req, res, next) => {
     const { rows: [pagoInsertado] } = await client.query(
       `INSERT INTO pagos (id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago,
         capital_amortizado, interes_pagado, saldo_capital_post_pago, cuotas_restantes_post_pago,
-        observaciones, creado_por_id, creado_por_nombre)
-       VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7,$8) RETURNING *`,
+        interes_mora, observaciones, creado_por_id, creado_por_nombre)
+       VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7,$8,$9) RETURNING *`,
       [id_prestamo, fecha_pago_real, monto_pagado, tipo_pago, forma_pago || 'efectivo',
-       observaciones || null, req.user?.id || null, req.user?.nombre || req.user?.username || null]
+       moraNum, observaciones || null, req.user?.id || null, req.user?.nombre || req.user?.username || null]
     );
 
     // Replay: recalcular TODOS los pagos del préstamo en orden cronológico

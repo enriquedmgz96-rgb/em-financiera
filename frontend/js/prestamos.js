@@ -211,7 +211,7 @@ async function renderPrestamoDetalle(id) {
             <td style="font-size:.8rem;color:#999">${new Date(pg.fecha_registro).toLocaleDateString('es-AR')}</td>
             <td>${labelTipo(pg)}${infoCuota(pg)}</td>
             <td>${esc(pg.forma_pago || 'efectivo')}</td>
-            <td>$${fmt(pg.monto_pagado)}</td>
+            <td>$${fmt(pg.monto_pagado)}${parseFloat(pg.interes_mora) > 0 ? `<div style="font-size:.72rem;color:#c0392b;margin-top:.2rem;white-space:nowrap">+ mora $${fmt(pg.interes_mora)}</div>` : ''}</td>
             <td>$${fmt(pg.capital_amortizado)}</td>
             <td>$${fmt(pg.interes_pagado)}</td>
             <td>$${fmt(pg.saldo_capital_post_pago)}</td>

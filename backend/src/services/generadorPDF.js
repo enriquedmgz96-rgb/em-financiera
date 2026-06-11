@@ -147,12 +147,19 @@ function _escribirRecibo(doc, pago, p, startY, titulo) {
   doc.text(`DNI: ${p.dni}`, col1, y); doc.text(`Fecha de pago: ${fechaPago}`, col2, y); y += 14;
   doc.text(`Préstamo N°: ${p.id}`, col1, y); doc.text(`Saldo post-pago: $${fmt(pago.saldo_capital_post_pago)}`, col2, y); y += 18;
 
-  doc.rect(col1, y, doc.page.width - 80, 38).fill('#f0f9f4').stroke('#27ae60');
+  const mora = parseFloat(pago.interes_mora || 0);
+  const totalCobrado = parseFloat(pago.monto_pagado || 0) + mora;
+  const boxH = mora > 0 ? 52 : 38;
+  doc.rect(col1, y, doc.page.width - 80, boxH).fill('#f0f9f4').stroke('#27ae60');
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(10)
     .text(`MONTO PAGADO: $${fmt(pago.monto_pagado)} ${p.moneda}`, col1 + 10, y + 5);
   doc.font('Helvetica').fontSize(8.5)
     .text(`Tipo: ${_labelTipoPago(pago, p)}   |   Forma: ${pago.forma_pago || 'efectivo'}   |   Capital amort.: $${fmt(pago.capital_amortizado)}   |   Interés: $${fmt(pago.interes_pagado)}`, col1 + 10, y + 20);
-  y += 50;
+  if (mora > 0) {
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#c0392b')
+      .text(`Interés por mora: $${fmt(mora)}   |   TOTAL COBRADO: $${fmt(totalCobrado)} ${p.moneda}`, col1 + 10, y + 34);
+  }
+  y += boxH + 12;
 
   if (pago.observaciones) {
     doc.font('Helvetica').fontSize(8).fillColor('#555').text(`Observaciones: ${pago.observaciones}`, col1, y);

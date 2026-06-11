@@ -136,6 +136,8 @@ async function renderPagoForm(prestamoId) {
         <textarea name="observaciones"></textarea>
       </div>
 
+      <div id="moraBox" style="display:none"></div>
+
       <div id="preview" class="preview-box" style="display:none"></div>
 
       <div style="margin-top:1rem">
@@ -151,6 +153,48 @@ async function renderPagoForm(prestamoId) {
   const previewEl    = document.getElementById('preview');
   const montoMsgEl   = document.getElementById('montoMsg');
   const btnConfirmar = document.getElementById('btnConfirmar');
+  const fechaPagoEl  = document.querySelector('input[name="fecha_pago_real"]');
+  const moraBox      = document.getElementById('moraBox');
+
+  // ── Interés por mora (recargo punitorio del contrato, 50% extra) ──
+  // Se calcula según la FECHA DEL PAGO ingresada vs la fecha en que vencía la cuota.
+  const periodoDias = p.periodicidad === 'semanal' ? 7 : 30;
+  let diasAtraso = 0;
+  let moraSugerida = 0;
+  function calcMora() {
+    const fv = fechaPagoEl.value;
+    if (!fv) { diasAtraso = 0; moraSugerida = 0; return; }
+    diasAtraso = Math.round((_fechaSolo(fv) - venceEstaCuota) / 86400000);
+    if (diasAtraso < 1) { diasAtraso = Math.max(0, diasAtraso); moraSugerida = 0; return; }
+    // mora = (interés del período ÷ días del período) × 1,5 × días de atraso
+    moraSugerida = Math.round((interes / periodoDias) * 1.5 * diasAtraso);
+  }
+  function moraCobrada() {
+    const c = document.getElementById('chkMora');
+    return (c && c.checked) ? moraSugerida : 0;
+  }
+  function renderMoraBox() {
+    const prev = (() => { const c = document.getElementById('chkMora'); return c ? c.checked : true; })();
+    calcMora();
+    if (diasAtraso < 1 || moraSugerida <= 0) {
+      moraBox.style.display = 'none';
+      moraBox.innerHTML = '';
+      actualizarPreview();
+      return;
+    }
+    moraBox.style.display = 'block';
+    moraBox.innerHTML = `
+      <div style="background:#fdecea;border-left:3px solid var(--rojo);padding:.65rem 1rem;border-radius:var(--radius);margin-bottom:1rem;font-size:.875rem">
+        <div style="color:var(--rojo);font-weight:700;margin-bottom:.35rem">⚠️ Pago atrasado ${diasAtraso} día${diasAtraso > 1 ? 's' : ''} (vencía ${venceEstaCuotaStr})</div>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+          <input type="checkbox" id="chkMora" ${prev ? 'checked' : ''} style="width:auto" />
+          Cobrar interés por mora: <strong>$${fmt(moraSugerida)}</strong>
+        </label>
+        <div style="font-size:.72rem;color:#888;margin-top:.3rem">Según contrato: 50% extra sobre la tasa, por los ${diasAtraso} día${diasAtraso > 1 ? 's' : ''} de atraso. Destildalo si lo perdonás.</div>
+      </div>`;
+    document.getElementById('chkMora').addEventListener('change', actualizarPreview);
+    actualizarPreview();
+  }
 
   function actualizarPreview() {
     const tipo  = tipoPagoEl.value;
@@ -187,6 +231,7 @@ async function renderPagoForm(prestamoId) {
       btnConfirmar.style.opacity = '';
     }
 
+    const mora = moraCobrada();
     previewEl.style.display = 'block';
     previewEl.innerHTML = `
       <strong>Vista previa del registro:</strong><br>
@@ -194,6 +239,7 @@ async function renderPagoForm(prestamoId) {
       Interés pagado: <strong>$${fmt(interes)}</strong> &nbsp;|&nbsp;
       Saldo post-pago: <strong style="color:${saldoPost === 0 ? 'var(--verde)' : 'var(--ink)'}">$${fmt(saldoPost)}</strong>
       ${saldoPost === 0 ? ' &nbsp;<span style="color:var(--verde);font-weight:600">✓ Cancela el préstamo</span>' : ''}
+      ${mora > 0 ? `<br>Interés por mora: <strong style="color:var(--rojo)">$${fmt(mora)}</strong> &nbsp;|&nbsp; <strong>Total a cobrar: $${fmt((parseFloat(montoRawEl.value) || 0) + mora)}</strong>` : ''}
     `;
   }
 
@@ -229,8 +275,13 @@ async function renderPagoForm(prestamoId) {
     actualizarPreview();
   });
 
+  // Recalcular la mora cada vez que cambia la fecha del pago
+  fechaPagoEl.addEventListener('change', renderMoraBox);
+  fechaPagoEl.addEventListener('input', renderMoraBox);
+
   // Estado inicial
   setMonto(cuotaCompleta, false);
+  renderMoraBox();
   actualizarPreview();
 
   document.getElementById('formPago').addEventListener('submit', async e => {
@@ -246,6 +297,7 @@ async function renderPagoForm(prestamoId) {
     const fd = Object.fromEntries(new FormData(e.target).entries());
     fd.id_prestamo  = prestamoId;
     fd.monto_pagado = montoRawEl.value;
+    fd.interes_mora = moraCobrada();
     const msg = document.getElementById('pagoMsg');
     try {
       await api.post('/pagos', fd);
