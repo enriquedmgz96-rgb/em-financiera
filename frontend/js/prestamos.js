@@ -130,6 +130,38 @@ async function renderPrestamoDetalle(id) {
     return '<span class="badge" style="background:#d5f5e3;color:#27ae60">Cuota completa</span>';
   };
 
+  // ── Número de cuota + si pagó adelantado / en término / con atraso ──
+  // La cuota se deduce contando los pagos "cuota completa" en orden cronológico.
+  const fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
+  const esSemanal = p.periodicidad === 'semanal';
+  const venceCuota = n => {
+    const dt = fechaSolo(p.primer_vencimiento);
+    if (esSemanal) dt.setDate(dt.getDate() + (n - 1) * 7);
+    else dt.setMonth(dt.getMonth() + (n - 1));
+    return dt;
+  };
+  // Asignar nro de cuota a cada pago "cuota_completa" según cronología real
+  const cronologico = [...p.pagos].sort((a, b) => {
+    const fa = String(a.fecha_pago_real), fb = String(b.fecha_pago_real);
+    return fa < fb ? -1 : fa > fb ? 1 : (a.id - b.id);
+  });
+  const cuotaDe = {};
+  let _cc = 0;
+  cronologico.forEach(pg => { if (pg.tipo_pago === 'cuota_completa') cuotaDe[pg.id] = ++_cc; });
+
+  const sello = (pg, n) => {
+    if (!pg.fecha_pago_real) return '';
+    const dias = Math.round((fechaSolo(pg.fecha_pago_real) - venceCuota(n)) / 86400000);
+    if (dias <= -1) return `<span style="color:#27ae60;font-weight:600">🟢 adelantado ${-dias}d</span>`;
+    if (dias === 0) return `<span style="color:#888;font-weight:600">⚪ en término</span>`;
+    return `<span style="color:#c0392b;font-weight:600">🔴 ${dias}d tarde</span>`;
+  };
+  const infoCuota = pg => {
+    const n = cuotaDe[pg.id];
+    if (!n) return '';
+    return `<div style="font-size:.72rem;color:#888;margin-top:.25rem;white-space:nowrap">Cuota ${n}/${p.total_cuotas} · ${sello(pg, n)} <span style="color:#aaa">(vencía ${venceCuota(n).toLocaleDateString('es-AR')})</span></div>`;
+  };
+
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>
@@ -177,7 +209,7 @@ async function renderPrestamoDetalle(id) {
           <tr>
             <td>${String(pg.fecha_pago_real).split('T')[0].split('-').reverse().join('/')}</td>
             <td style="font-size:.8rem;color:#999">${new Date(pg.fecha_registro).toLocaleDateString('es-AR')}</td>
-            <td>${labelTipo(pg)}</td>
+            <td>${labelTipo(pg)}${infoCuota(pg)}</td>
             <td>${esc(pg.forma_pago || 'efectivo')}</td>
             <td>$${fmt(pg.monto_pagado)}</td>
             <td>$${fmt(pg.capital_amortizado)}</td>

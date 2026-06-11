@@ -50,7 +50,18 @@ async function renderPagoForm(prestamoId) {
   const cuotaCompleta = parseFloat((capitalEstaCuota + interes).toFixed(2));
 
   const esUltimaCuota = saldo < cuotaBase;
-  const nroCuotaActual = p.pagos.length + 1;
+  // La cuota que se está cobrando = cantidad de cuotas completas ya pagadas + 1
+  const cuotasCompletasPagadas = p.pagos.filter(pg => pg.tipo_pago === 'cuota_completa').length;
+  const nroCuotaActual = cuotasCompletasPagadas + 1;
+  // Fecha en que vence/vencía esta cuota (para ver si paga adelantado)
+  const _fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
+  const venceEstaCuota = (() => {
+    const dt = _fechaSolo(p.primer_vencimiento);
+    if (p.periodicidad === 'semanal') dt.setDate(dt.getDate() + (nroCuotaActual - 1) * 7);
+    else dt.setMonth(dt.getMonth() + (nroCuotaActual - 1));
+    return dt;
+  })();
+  const venceEstaCuotaStr = venceEstaCuota.toLocaleDateString('es-AR');
 
   app.innerHTML = `
     <div class="seccion-titulo">
@@ -61,7 +72,7 @@ async function renderPagoForm(prestamoId) {
     <div style="background:${esUltimaCuota ? 'var(--gold-light)' : 'var(--verde-tint)'};border-left:3px solid ${esUltimaCuota ? 'var(--gold)' : 'var(--verde-mid)'};padding:.65rem 1rem;border-radius:var(--radius);margin-bottom:1.25rem;font-size:.875rem;color:var(--ink-2)">
       ${esUltimaCuota
         ? `<strong>Última cuota</strong> — El cliente adeuda menos de una cuota completa. El monto sugerido es el saldo total con intereses.`
-        : `Registrando <strong>${p.periodicidad === 'semanal' ? 'semana' : 'cuota'} ${nroCuotaActual} de ${p.total_cuotas}</strong>`
+        : `Registrando <strong>${p.periodicidad === 'semanal' ? 'semana' : 'cuota'} ${nroCuotaActual} de ${p.total_cuotas}</strong> — vence el <strong>${venceEstaCuotaStr}</strong>`
       }
     </div>
 
