@@ -12,14 +12,28 @@ async function descargarPDF(url, filename) {
   } catch(e) { alert("Error: " + e.message); }
 }
 
-async function renderPrestamos(verArchivados = false) {
+async function renderPrestamos(filtro = 'activos') {
+  // Compatibilidad: antes se llamaba renderPrestamos(true/false) para archivados
+  if (filtro === true) filtro = 'archivados';
+  if (filtro === false) filtro = 'activos';
+
   const app = document.getElementById('app');
   app.innerHTML = '<p>Cargando...</p>';
-  const url = verArchivados ? '/prestamos?estado=archivado' : '/prestamos';
-  const prestamos = await api.get(url).catch(() => []);
+  // Traemos todo una sola vez y filtramos en pantalla (más ágil para cambiar de pestaña)
+  const todos = await api.get('/prestamos?incluir_archivados=true').catch(() => []);
+
+  // Grupos por estado de negocio
+  const grupos = {
+    activos:     todos.filter(p => p.estado === 'activo' || p.estado === 'mora'),
+    mora:        todos.filter(p => p.estado === 'mora'),
+    finalizados: todos.filter(p => p.estado === 'cancelado'),
+    archivados:  todos.filter(p => p.estado === 'archivado'),
+    todos:       todos,
+  };
+  const lista = grupos[filtro] || grupos.activos;
 
   const semaforo = p => {
-    if (p.estado === 'cancelado')  return '<span class="badge badge-verde">Cancelado</span>';
+    if (p.estado === 'cancelado')  return '<span class="badge" style="background:#d6eaf8;color:#2980b9">✓ Finalizado</span>';
     if (p.estado === 'mora')       return '<span class="badge badge-rojo">Mora</span>';
     if (p.estado === 'archivado')  return '<span class="badge" style="background:#f0f0f0;color:#888">Archivado</span>';
     return '<span class="badge badge-verde">Activo</span>';
@@ -29,24 +43,51 @@ async function renderPrestamos(verArchivados = false) {
     ? '<span class="badge" style="background:#d6eaf8;color:#2980b9;font-size:.72rem;margin-left:.3rem">SEMANAL</span>'
     : '';
 
+  // Pestañas de filtro con contador
+  const tabs = [
+    { key: 'activos',     label: 'Activos' },
+    { key: 'mora',        label: 'En mora' },
+    { key: 'finalizados', label: 'Finalizados' },
+    { key: 'archivados',  label: 'Archivados' },
+    { key: 'todos',       label: 'Todos' },
+  ];
+  const chips = tabs.map(t => {
+    const n = grupos[t.key].length;
+    const activa = t.key === filtro;
+    const esMora = t.key === 'mora' && n > 0;
+    const bg = activa ? '#1b4332' : 'white';
+    const fg = activa ? 'white' : (esMora ? '#c0392b' : '#1b4332');
+    const bd = esMora ? '#c0392b' : '#1b4332';
+    const countBg = activa ? 'rgba(255,255,255,.25)' : (esMora ? '#fdecea' : '#e7ecea');
+    const countFg = activa ? 'white' : (esMora ? '#c0392b' : '#1b4332');
+    return `<button type="button" onclick="renderPrestamos('${t.key}')"
+      style="border:1.5px solid ${bd};background:${bg};color:${fg};padding:.4rem .9rem;border-radius:20px;cursor:pointer;font-weight:600;font-size:.85rem;display:inline-flex;align-items:center;gap:.45rem;transition:.15s">
+      ${t.label}
+      <span style="background:${countBg};color:${countFg};border-radius:10px;padding:.05rem .45rem;font-size:.75rem;font-weight:700">${n}</span>
+    </button>`;
+  }).join('');
+
+  const vacios = {
+    activos: 'No hay préstamos activos.',
+    mora: '🎉 No hay préstamos en mora.',
+    finalizados: 'Todavía no hay préstamos finalizados.',
+    archivados: 'No hay préstamos archivados.',
+    todos: 'Sin préstamos registrados.',
+  };
+
   app.innerHTML = `
     <div class="seccion-titulo">
       <h2>Préstamos</h2>
-      <div style="display:flex;gap:.5rem;align-items:center">
-        <button class="btn-secondary" style="font-size:.85rem" onclick="renderPrestamos(${!verArchivados})">
-          ${verArchivados ? '← Ver activos' : 'Ver archivados'}
-        </button>
-        <button class="btn-primary" onclick="renderPrestamoForm()">+ Nuevo préstamo</button>
-      </div>
+      <button class="btn-primary" onclick="renderPrestamoForm()">+ Nuevo préstamo</button>
     </div>
-    ${verArchivados ? '<p style="color:#888;font-size:.85rem;margin-bottom:1rem">Mostrando préstamos archivados (ocultos de la lista principal)</p>' : ''}
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem">${chips}</div>
     <table>
       <thead>
         <tr><th>Legajo</th><th>Cliente</th><th>Capital</th><th>Tasa</th><th>Cuotas/Sem.</th><th>1er Vcto</th><th>Estado</th><th>Creado por</th><th></th></tr>
       </thead>
       <tbody>
-        ${prestamos.length === 0 ? `<tr><td colspan="8" style="text-align:center;color:#999">${verArchivados ? 'No hay préstamos archivados' : 'Sin préstamos registrados'}</td></tr>` :
-          prestamos.map(p => `
+        ${lista.length === 0 ? `<tr><td colspan="9" style="text-align:center;color:#999;padding:1.5rem">${vacios[filtro] || 'Sin resultados.'}</td></tr>` :
+          lista.map(p => `
             <tr>
               <td><span style="font-family:var(--font-mono);font-size:.82rem;color:#888">P-${String(p.id).padStart(4,'0')}</span></td>
               <td>${esc(p.apellido)}, ${esc(p.nombre)}</td>
@@ -257,8 +298,9 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
       </div>
 
       <div class="form-group">
-        <label>Primer vencimiento *</label>
-        <input name="primer_vencimiento" type="date" required />
+        <label>Vencimiento de la 1ª cuota *</label>
+        <input name="primer_vencimiento" id="inpPrimerVcto" type="date" required />
+        <small style="color:#888;margin-top:.3rem;display:block">Sugerido: día 10 del mes que viene. Las demás cuotas vencen el mismo día de cada mes.</small>
       </div>
       <div class="form-group">
         <label>Motivo del préstamo</label>
@@ -299,6 +341,15 @@ async function renderPrestamoForm(idClientePreseleccionado = null) {
       <div id="formMsg"></div>
     </form>
   `;
+
+  // Sugerir vencimiento de la 1ª cuota: día 10 del mes siguiente
+  (() => {
+    const hoy = new Date();
+    const prox = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 10);
+    const ymd = `${prox.getFullYear()}-${String(prox.getMonth() + 1).padStart(2, '0')}-10`;
+    const inp = document.getElementById('inpPrimerVcto');
+    if (inp && !inp.value) inp.value = ymd;
+  })();
 
   // Selección de categoría
   window._selCat = (tasa, btn) => {
@@ -519,7 +570,7 @@ async function eliminarPago(pagoId, prestamoId) {
 }
 
 async function archivarPrestamo(id) {
-  if (!confirm('¿Archivar este préstamo? Va a quedar oculto de la lista principal pero podés verlo en "Ver archivados".')) return;
+  if (!confirm('¿Archivar este préstamo? Va a quedar oculto de la lista principal pero podés verlo en la pestaña "Archivados".')) return;
   try {
     await api.put(`/prestamos/${id}`, { estado: 'archivado' });
     renderPrestamos();
