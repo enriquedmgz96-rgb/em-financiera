@@ -615,7 +615,11 @@ async function archivarPrestamo(id) {
 async function desarchivarPrestamo(id) {
   if (!confirm('¿Restaurar este préstamo a la lista principal?')) return;
   try {
-    await api.put(`/prestamos/${id}`, { estado: 'activo' });
+    // Volver al estado REAL según el saldo: si ya está pagado → finalizado; si no → activo
+    const p = await api.get(`/prestamos/${id}`);
+    const saldo = parseFloat(p.saldo_capital_actual);
+    const estado = (Number.isFinite(saldo) && saldo <= 0) ? 'cancelado' : 'activo';
+    await api.put(`/prestamos/${id}`, { estado });
     renderPrestamoDetalle(id);
   } catch (err) {
     if (err._auth) return;
