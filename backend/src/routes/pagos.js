@@ -73,11 +73,11 @@ router.post('/', async (req, res, next) => {
       // VALIDACIONES DE NEGOCIO — solo para el pago recién insertado
       if (pg.id === pagoInsertado.id) {
         const interesPeriodo = resultado.interesPagado;
-        // Francés: valor_cuota_base YA es el PMT (capital + interés). Flat/alemán:
-        // cuotaBase es sólo la porción de capital, así que hay que sumarle el interés.
-        const cuotaCompleta  = tipoAmortizacion === 'frances'
-          ? cuotaBase
-          : cuotaBase + interesPeriodo;
+        // La cuota completa real = capital de ESTA cuota + interés del período.
+        // En la última cuota el capital es menor (lo que resta de saldo), por eso se
+        // usa resultado.capitalAmortizado (ya ajustado al saldo) en vez de cuotaBase.
+        // Sirve para flat, alemán y francés por igual.
+        const cuotaCompleta = parseFloat((resultado.capitalAmortizado + interesPeriodo).toFixed(2));
         const monto = parseFloat(pg.monto_pagado);
         const tol = 1; // tolerancia $1 por redondeos
         if (pg.tipo_pago === 'adelanto_parcial' && monto < interesPeriodo - tol) {
