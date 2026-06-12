@@ -95,12 +95,14 @@ router.get('/', async (req, res, next) => {
       WHERE c.${VIVAS}
     `);
 
-    // Próximas devoluciones (7 días) — captaciones cuyo próximo vencimiento se acerca
+    // Próximas devoluciones (7 días) — captaciones cuyo próximo vencimiento se acerca.
+    // Mismo criterio que préstamos: se mide por capital devuelto, no por contar
+    // "cuota completa" (así adelantos y pagos de más también cuentan).
     const { rows: proximasDev } = await pool.query(`
       SELECT c.id, c.monto_capital, c.periodicidad,
              i.nombre, i.apellido, i.dni, i.telefono,
-             COUNT(d.id) FILTER (WHERE d.tipo_pago = 'cuota_completa') AS nro_devoluciones,
-             TO_CHAR((c.primer_vencimiento + (COUNT(d.id) FILTER (WHERE d.tipo_pago = 'cuota_completa') *
+             (c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) AS nro_devoluciones,
+             TO_CHAR((c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
                CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
              ))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM captaciones c
@@ -108,20 +110,20 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN devoluciones d ON d.id_captacion = c.id
       WHERE c.${VIVAS}
       GROUP BY c.id, i.id
-      HAVING (c.primer_vencimiento + (COUNT(d.id) FILTER (WHERE d.tipo_pago = 'cuota_completa') *
+      HAVING (c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
         CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
       ))::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-      ORDER BY (c.primer_vencimiento + (COUNT(d.id) FILTER (WHERE d.tipo_pago = 'cuota_completa') *
+      ORDER BY (c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
         CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
       ))::date
     `);
 
-    // Captaciones en mora (próximo vencimiento ya pasó)
+    // Captaciones en mora (próximo vencimiento ya pasó) — por capital devuelto.
     const { rows: captacionesMora } = await pool.query(`
       SELECT c.id, c.monto_capital, c.periodicidad,
              i.nombre, i.apellido, i.dni, i.telefono,
-             COUNT(d.id) FILTER (WHERE d.tipo_pago = 'cuota_completa') AS nro_devoluciones,
-             TO_CHAR((c.primer_vencimiento + (COUNT(d.id) FILTER (WHERE d.tipo_pago = 'cuota_completa') *
+             (c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) AS nro_devoluciones,
+             TO_CHAR((c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
                CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
              ))::date, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM captaciones c
@@ -129,7 +131,7 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN devoluciones d ON d.id_captacion = c.id
       WHERE c.${VIVAS}
       GROUP BY c.id, i.id
-      HAVING (c.primer_vencimiento + (COUNT(d.id) FILTER (WHERE d.tipo_pago = 'cuota_completa') *
+      HAVING (c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
         CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
       ))::date < CURRENT_DATE
     `);
