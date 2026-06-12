@@ -50,9 +50,13 @@ async function renderPagoForm(prestamoId) {
   const cuotaCompleta = parseFloat((capitalEstaCuota + interes).toFixed(2));
 
   const esUltimaCuota = saldo < cuotaBase;
-  // La cuota que se está cobrando = cantidad de cuotas completas ya pagadas + 1
-  const cuotasCompletasPagadas = p.pagos.filter(pg => pg.tipo_pago === 'cuota_completa').length;
-  const nroCuotaActual = cuotasCompletasPagadas + 1;
+  // La cuota que se está cobrando se mide por el CAPITAL ya pagado, no por contar
+  // "cuota completa" (igual criterio que el dashboard). cuotas cubiertas =
+  // total - cuotas que faltan (mín. de cuotas_restantes_post_pago de los pagos).
+  const cuotasRestantesActual = p.pagos.length
+    ? Math.min(...p.pagos.map(pg => parseInt(pg.cuotas_restantes_post_pago, 10)))
+    : p.total_cuotas;
+  const nroCuotaActual = (p.total_cuotas - cuotasRestantesActual) + 1;
   // Fecha en que vence/vencía esta cuota (para ver si paga adelantado)
   const _fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
   const venceEstaCuota = (() => {

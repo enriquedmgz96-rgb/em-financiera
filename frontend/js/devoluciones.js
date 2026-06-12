@@ -45,9 +45,12 @@ async function renderDevolucionForm(captacionId) {
     : Math.min(saldo, cuotaBase);
   const cuotaCompleta = parseFloat((capitalEstaCuota + interes).toFixed(2));
   const esUltimaCuota = saldo < cuotaBase;
-  // La cuota que se está devolviendo = cantidad de cuotas completas ya devueltas + 1
-  const cuotasCompletasPagadas = c.devoluciones.filter(d => d.tipo_pago === 'cuota_completa').length;
-  const nroCuotaActual = cuotasCompletasPagadas + 1;
+  // La cuota que se devuelve se mide por el CAPITAL ya devuelto, no por contar
+  // "cuota completa" (igual criterio que el dashboard).
+  const cuotasRestantesActual = c.devoluciones.length
+    ? Math.min(...c.devoluciones.map(d => parseInt(d.cuotas_restantes_post_pago, 10)))
+    : c.total_cuotas;
+  const nroCuotaActual = (c.total_cuotas - cuotasRestantesActual) + 1;
   const _fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
   const venceEstaCuota = (() => {
     const dt = _fechaSolo(c.primer_vencimiento);
