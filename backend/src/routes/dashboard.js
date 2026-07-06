@@ -183,9 +183,9 @@ router.get('/balance', async (req, res, next) => {
     const VIVOS = "estado NOT IN ('cancelado','archivado')";
     const VIVAS = "estado NOT IN ('devuelta','archivada')";
 
-    // ACTIVO: capital pendiente de cobrar a clientes (préstamos vivos)
-    const { rows: [activo] } = await pool.query(`
-      SELECT
+    // ACTIVO por moneda: capital pendiente de cobrar a clientes (préstamos vivos)
+    const { rows: activoRows } = await pool.query(`
+      SELECT p.moneda,
         COALESCE(SUM(p.monto_capital),0)                                  AS capital_prestado,
         COALESCE(SUM(p.monto_capital - COALESCE(amort.total,0)),0)        AS a_cobrar,
         COUNT(*)                                                          AS operaciones
@@ -194,11 +194,12 @@ router.get('/balance', async (req, res, next) => {
         SELECT id_prestamo, SUM(capital_amortizado) AS total FROM pagos GROUP BY id_prestamo
       ) amort ON amort.id_prestamo = p.id
       WHERE p.${VIVOS}
+      GROUP BY p.moneda
     `);
 
-    // PASIVO: capital pendiente de devolver a inversores (captaciones vivas)
-    const { rows: [pasivo] } = await pool.query(`
-      SELECT
+    // PASIVO por moneda: capital pendiente de devolver a inversores (captaciones vivas)
+    const { rows: pasivoRows } = await pool.query(`
+      SELECT c.moneda,
         COALESCE(SUM(c.monto_capital),0)                                  AS capital_captado,
         COALESCE(SUM(c.monto_capital - COALESCE(dev.total,0)),0)          AS a_devolver,
         COUNT(*)                                                          AS operaciones
@@ -207,10 +208,11 @@ router.get('/balance', async (req, res, next) => {
         SELECT id_captacion, SUM(capital_amortizado) AS total FROM devoluciones GROUP BY id_captacion
       ) dev ON dev.id_captacion = c.id
       WHERE c.${VIVAS}
+      GROUP BY c.moneda
     `);
 
-    // TENDENCIA: últimos 6 meses de intereses cobrados vs pagados (spread mensual)
-    const { rows: tendencia } = await pool.query(`
+    // TENDENCIA por moneda: últimos 6 meses de intereses cobrados vs pagados
+    const { rows: tendRows } = await pool.query(`
       WITH meses AS (
         SELECT to_char(d, 'YYYY-MM') AS ym
         FROM generate_series(
@@ -220,47 +222,56 @@ router.get('/balance', async (req, res, next) => {
         ) d
       ),
       cob AS (
-        SELECT to_char(date_trunc('month', fecha_pago_real), 'YYYY-MM') AS ym,
-               SUM(interes_pagado) AS interes, SUM(capital_amortizado) AS capital
-        FROM pagos GROUP BY 1
+        SELECT p.moneda, to_char(date_trunc('month', pg.fecha_pago_real), 'YYYY-MM') AS ym,
+               SUM(pg.interes_pagado) AS interes
+        FROM pagos pg JOIN prestamos p ON p.id = pg.id_prestamo GROUP BY 1,2
       ),
       pag AS (
-        SELECT to_char(date_trunc('month', fecha_pago_real), 'YYYY-MM') AS ym,
-               SUM(interes_pagado) AS interes, SUM(capital_amortizado) AS capital
-        FROM devoluciones GROUP BY 1
-      )
-      SELECT m.ym                                                        AS mes,
-             COALESCE(cob.interes,0)::float                              AS intereses_cobrados,
-             COALESCE(pag.interes,0)::float                              AS intereses_pagados,
-             (COALESCE(cob.interes,0) - COALESCE(pag.interes,0))::float  AS spread,
-             COALESCE(cob.capital,0)::float                              AS capital_cobrado,
-             COALESCE(pag.capital,0)::float                              AS capital_devuelto
-      FROM meses m
-      LEFT JOIN cob ON cob.ym = m.ym
-      LEFT JOIN pag ON pag.ym = m.ym
-      ORDER BY m.ym
+        SELECT c.moneda, to_char(date_trunc('month', d.fecha_pago_real), 'YYYY-MM') AS ym,
+               SUM(d.interes_pagado) AS interes
+        FROM devoluciones d JOIN captaciones c ON c.id = d.id_captacion GROUP BY 1,2
+      ),
+      mon AS (SELECT DISTINCT moneda FROM (SELECT moneda FROM cob UNION SELECT moneda FROM pag) x WHERE moneda IS NOT NULL)
+      SELECT mon.moneda, m.ym AS mes,
+             COALESCE(cob.interes,0)::float AS intereses_cobrados,
+             COALESCE(pag.interes,0)::float AS intereses_pagados,
+             (COALESCE(cob.interes,0) - COALESCE(pag.interes,0))::float AS spread
+      FROM mon CROSS JOIN meses m
+      LEFT JOIN cob ON cob.ym = m.ym AND cob.moneda = mon.moneda
+      LEFT JOIN pag ON pag.ym = m.ym AND pag.moneda = mon.moneda
+      ORDER BY mon.moneda, m.ym
     `);
 
-    const aCobrar   = parseFloat(activo.a_cobrar);
-    const aDevolver = parseFloat(pasivo.a_devolver);
-    const posicionNeta = parseFloat((aCobrar - aDevolver).toFixed(2));
-    const cobertura = aDevolver > 0 ? parseFloat((aCobrar / aDevolver).toFixed(4)) : null;
-
-    res.json({
-      activo: {
-        capital_prestado: parseFloat(activo.capital_prestado),
-        a_cobrar: aCobrar,
-        operaciones: parseInt(activo.operaciones),
-      },
-      pasivo: {
-        capital_captado: parseFloat(pasivo.capital_captado),
-        a_devolver: aDevolver,
-        operaciones: parseInt(pasivo.operaciones),
-      },
-      posicion_neta: posicionNeta,
-      cobertura,
-      tendencia,
+    // Armar un bloque por cada moneda con datos (activo o pasivo)
+    const monedas = [...new Set([
+      ...activoRows.map(r => r.moneda),
+      ...pasivoRows.map(r => r.moneda),
+    ])].sort();
+    const por_moneda = monedas.map(mon => {
+      const a = activoRows.find(r => r.moneda === mon) || {};
+      const p = pasivoRows.find(r => r.moneda === mon) || {};
+      const aCobrar   = parseFloat(a.a_cobrar || 0);
+      const aDevolver = parseFloat(p.a_devolver || 0);
+      return {
+        moneda: mon,
+        activo: {
+          capital_prestado: parseFloat(a.capital_prestado || 0),
+          a_cobrar: aCobrar,
+          operaciones: parseInt(a.operaciones || 0),
+        },
+        pasivo: {
+          capital_captado: parseFloat(p.capital_captado || 0),
+          a_devolver: aDevolver,
+          operaciones: parseInt(p.operaciones || 0),
+        },
+        posicion_neta: parseFloat((aCobrar - aDevolver).toFixed(2)),
+        cobertura: aDevolver > 0 ? parseFloat((aCobrar / aDevolver).toFixed(4)) : null,
+        tendencia: tendRows.filter(t => t.moneda === mon)
+          .map(t => ({ mes: t.mes, intereses_cobrados: t.intereses_cobrados, intereses_pagados: t.intereses_pagados, spread: t.spread })),
+      };
     });
+
+    res.json({ por_moneda });
   } catch (err) { next(err); }
 });
 
