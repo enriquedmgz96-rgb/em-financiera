@@ -16,6 +16,9 @@ router.post('/', async (req, res, next) => {
   if (!fecha_pago_real) {
     return res.status(400).json({ error: 'fecha_pago_real es requerida' });
   }
+  if (String(fecha_pago_real).slice(0, 10) > new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ error: 'La fecha del pago no puede ser futura.' });
+  }
   if (!TIPOS_VALIDOS.includes(tipo_pago)) {
     return res.status(400).json({ error: `tipo_pago debe ser: ${TIPOS_VALIDOS.join(', ')}` });
   }

@@ -109,7 +109,7 @@ async function renderPagoForm(prestamoId) {
     <form id="formPago" style="max-width:500px">
       <div class="form-group">
         <label>Fecha del pago *</label>
-        <input name="fecha_pago_real" type="date" required value="${new Date().toISOString().split('T')[0]}" />
+        <input name="fecha_pago_real" type="date" required max="${new Date().toISOString().split('T')[0]}" value="${new Date().toISOString().split('T')[0]}" />
       </div>
 
       <div class="form-group">
@@ -266,9 +266,15 @@ async function renderPagoForm(prestamoId) {
 
   montoPagadoEl.addEventListener('input', e => {
     if (montoPagadoEl.readOnly) return;
-    const raw = e.target.value.replace(/\D/g, '');
-    e.target.value = raw ? '$ ' + Number(raw).toLocaleString('es-AR') : '';
-    montoRawEl.value = raw || '0';
+    // Permitir dígitos y UNA coma decimal (formato AR): no perder los centavos
+    const v = e.target.value.replace(/[^\d,]/g, '');
+    const partes = v.split(',');
+    const ent = partes[0].replace(/^0+(?=\d)/, '');
+    const dec = partes.length > 1 ? partes[1].slice(0, 2) : '';
+    const tieneComa = v.includes(',');
+    const entFmt = ent ? Number(ent).toLocaleString('es-AR') : '';
+    e.target.value = (entFmt || tieneComa) ? '$ ' + (entFmt || '0') + (tieneComa ? ',' + dec : '') : '';
+    montoRawEl.value = (ent || '0') + (dec ? '.' + dec : '');
     actualizarPreview();
   });
 

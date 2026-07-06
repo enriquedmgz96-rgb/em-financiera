@@ -40,6 +40,10 @@ router.post('/', async (req, res, next) => {
   if (!id_cliente || !monto_capital || !tasa_interes_mensual || !total_cuotas || !primer_vencimiento) {
     return res.status(400).json({ error: 'Faltan campos requeridos: id_cliente, monto_capital, tasa_interes_mensual, total_cuotas, primer_vencimiento' });
   }
+  // Si el préstamo lleva garante, exigir sus datos mínimos (espejo del front).
+  if (_requiereGarantia && (!cuil_garantia || !domicilio_garantia)) {
+    return res.status(400).json({ error: 'Faltan datos del garante (CUIL y domicilio). Completalos o marcá el préstamo como "sin garantía".' });
+  }
   const tipoAmort = ['flat', 'frances', 'aleman'].includes(tipo_amortizacion) ? tipo_amortizacion : 'flat';
   // Frances: valor_cuota_base = PMT (cuota total fija con interés sobre saldo)
   // Flat/Alemán: valor_cuota_base = capital / cuotas (solo la porción de capital)

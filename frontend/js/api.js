@@ -23,6 +23,22 @@ function escJs(v) {
 window.esc = esc;
 window.escJs = escJs;
 
+// Total a pagar (capital + intereses) según el sistema de amortización.
+// flat:    interés fijo sobre capital original → capital·(1 + tasa·n)
+// frances: cuota fija PMT → PMT·n
+// aleman:  interés decreciente sobre saldo → capital + capital·tasa·(n+1)/2
+function totalConIntereses(capital, tasaPct, n, tipo) {
+  capital = parseFloat(capital); const tasa = parseFloat(tasaPct) / 100; n = parseInt(n);
+  if (!Number.isFinite(capital) || !Number.isFinite(tasa) || !Number.isFinite(n) || n <= 0) return capital || 0;
+  if (tipo === 'frances') {
+    const pmt = tasa === 0 ? capital / n : capital * tasa / (1 - Math.pow(1 + tasa, -n));
+    return pmt * n;
+  }
+  if (tipo === 'aleman') return capital + capital * tasa * (n + 1) / 2;
+  return capital * (1 + tasa * n); // flat
+}
+window.totalConIntereses = totalConIntereses;
+
 const API_BASE = '/api';
 
 async function apiFetch(path, options = {}) {

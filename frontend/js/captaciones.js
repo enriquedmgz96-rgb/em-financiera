@@ -127,7 +127,7 @@ async function renderCaptacionDetalle(id) {
     <div class="cards" style="margin-bottom:1.5rem">
       <div class="card"><div class="label">Capital original</div><div class="value">$${fmt(c.monto_capital)}</div></div>
       <div class="card"><div class="label">Saldo a devolver</div><div class="value">$${fmt(c.saldo_capital_actual)}</div></div>
-      <div class="card"><div class="label">Total con intereses</div><div class="value">$${fmt(parseFloat(c.monto_capital) * (1 + parseFloat(c.tasa_interes_mensual) * c.total_cuotas / 100))}</div></div>
+      <div class="card"><div class="label">Total con intereses</div><div class="value">$${fmt(totalConIntereses(c.monto_capital, c.tasa_interes_mensual, c.total_cuotas, c.tipo_amortizacion))}</div></div>
       <div class="card"><div class="label">Interés próx. ${c.periodicidad === 'semanal' ? 'semana' : 'mes'}</div><div class="value">$${fmt(c.interes_proximo_mes)}</div></div>
       <div class="card"><div class="label">Tasa ${c.periodicidad === 'semanal' ? 'semanal' : 'mensual'}</div><div class="value">${parseFloat(c.tasa_interes_mensual)}%</div></div>
       <div class="card"><div class="label">Cuotas</div><div class="value">${c.total_cuotas}</div></div>
