@@ -36,35 +36,41 @@ router.get('/', async (req, res, next) => {
       ) amort ON amort.id_prestamo = p.id
       WHERE p.${VIVOS}
     `);
-    // La mora se mide por el CAPITAL realmente pagado, no por cuántos pagos se
-    // etiquetaron "cuota completa". Cuotas cubiertas = total - cuotas que faltan
-    // (MIN(cuotas_restantes_post_pago) = estado actual; sin pagos → faltan todas).
-    // Así un cliente que paga adelantos o de más NO cae en mora falsa.
+    // Períodos cubiertos = el MÁS avanzado entre:
+    //   (a) capital pagado: total - cuotas que faltan (MIN(cuotas_restantes_post_pago))
+    //   (b) períodos servidos: cantidad de pagos "cuota completa" o "solo interés"
+    // (a) captura a los que pagan adelantos/de más; (b) captura a los que pagan
+    // solo el interés del período (están al día aunque no bajen capital) y además
+    // es robusto ante el redondeo del contador de cuotas. Sin pagos → faltan todas.
+    const CUB = `LEAST(p.total_cuotas, GREATEST(
+      p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas),
+      COUNT(pg.id) FILTER (WHERE pg.tipo_pago IN ('cuota_completa','solo_interes'))
+    ))`;
+    const VTO = `(p.primer_vencimiento + (${CUB} * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date`;
     const { rows: mora } = await pool.query(`
       SELECT p.id, p.monto_capital, p.primer_vencimiento,
              c.nombre, c.apellido, c.dni, c.telefono,
-             (p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) AS nro_pagos,
-             TO_CHAR((p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date, 'DD/MM/YYYY') AS proximo_vencimiento
+             ${CUB} AS nro_pagos,
+             TO_CHAR(${VTO}, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM prestamos p
       JOIN clientes c ON c.id = p.id_cliente
       LEFT JOIN pagos pg ON pg.id_prestamo = p.id
       WHERE p.estado IN ('activo','mora')
       GROUP BY p.id, c.id
-      HAVING (p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date < CURRENT_DATE
+      HAVING ${VTO} < CURRENT_DATE
     `);
     const { rows: proximos } = await pool.query(`
       SELECT p.id, p.monto_capital, p.tasa_interes_mensual, p.valor_cuota_base,
              p.primer_vencimiento, c.nombre, c.apellido, c.dni, c.telefono,
-             (p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) AS nro_pagos,
-             TO_CHAR((p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date, 'DD/MM/YYYY') AS proximo_vencimiento
+             ${CUB} AS nro_pagos,
+             TO_CHAR(${VTO}, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM prestamos p
       JOIN clientes c ON c.id = p.id_cliente
       LEFT JOIN pagos pg ON pg.id_prestamo = p.id
       WHERE p.estado IN ('activo','mora')
       GROUP BY p.id, c.id
-      HAVING (p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date
-             BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-      ORDER BY (p.primer_vencimiento + ((p.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), p.total_cuotas)) * CASE p.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date
+      HAVING ${VTO} BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+      ORDER BY ${VTO}
     `);
     // ===== MÓDULO PLATA DE TERCEROS =====
     // Mismo filtro de "vivas" (activas + mora) para que la matemática cierre.
@@ -95,45 +101,39 @@ router.get('/', async (req, res, next) => {
       WHERE c.${VIVAS}
     `);
 
-    // Próximas devoluciones (7 días) — captaciones cuyo próximo vencimiento se acerca.
-    // Mismo criterio que préstamos: se mide por capital devuelto, no por contar
-    // "cuota completa" (así adelantos y pagos de más también cuentan).
+    // Próximas devoluciones (7 días) y mora de captaciones. Mismo criterio que
+    // préstamos: el más avanzado entre capital devuelto y períodos servidos
+    // (devoluciones "cuota completa" o "solo interés").
+    const CUB_C = `LEAST(c.total_cuotas, GREATEST(
+      c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas),
+      COUNT(d.id) FILTER (WHERE d.tipo_pago IN ('cuota_completa','solo_interes'))
+    ))`;
+    const VTO_C = `(c.primer_vencimiento + (${CUB_C} * CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date`;
     const { rows: proximasDev } = await pool.query(`
       SELECT c.id, c.monto_capital, c.periodicidad,
              i.nombre, i.apellido, i.dni, i.telefono,
-             (c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) AS nro_devoluciones,
-             TO_CHAR((c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
-               CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
-             ))::date, 'DD/MM/YYYY') AS proximo_vencimiento
+             ${CUB_C} AS nro_devoluciones,
+             TO_CHAR(${VTO_C}, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM captaciones c
       JOIN clientes i ON i.id = c.id_inversor
       LEFT JOIN devoluciones d ON d.id_captacion = c.id
       WHERE c.${VIVAS}
       GROUP BY c.id, i.id
-      HAVING (c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
-        CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
-      ))::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-      ORDER BY (c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
-        CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
-      ))::date
+      HAVING ${VTO_C} BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+      ORDER BY ${VTO_C}
     `);
 
-    // Captaciones en mora (próximo vencimiento ya pasó) — por capital devuelto.
     const { rows: captacionesMora } = await pool.query(`
       SELECT c.id, c.monto_capital, c.periodicidad,
              i.nombre, i.apellido, i.dni, i.telefono,
-             (c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) AS nro_devoluciones,
-             TO_CHAR((c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
-               CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
-             ))::date, 'DD/MM/YYYY') AS proximo_vencimiento
+             ${CUB_C} AS nro_devoluciones,
+             TO_CHAR(${VTO_C}, 'DD/MM/YYYY') AS proximo_vencimiento
       FROM captaciones c
       JOIN clientes i ON i.id = c.id_inversor
       LEFT JOIN devoluciones d ON d.id_captacion = c.id
       WHERE c.${VIVAS}
       GROUP BY c.id, i.id
-      HAVING (c.primer_vencimiento + ((c.total_cuotas - COALESCE(MIN(d.cuotas_restantes_post_pago), c.total_cuotas)) *
-        CASE c.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END
-      ))::date < CURRENT_DATE
+      HAVING ${VTO_C} < CURRENT_DATE
     `);
 
     // Spread financiero = intereses cobrados − intereses pagados

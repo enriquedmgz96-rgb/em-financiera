@@ -79,7 +79,7 @@ router.get('/:id', async (req, res, next) => {
     if (prestamos.length === 0) return res.status(404).json({ error: 'Préstamo no encontrado' });
     const prestamo = prestamos[0];
     const { rows: pagos } = await pool.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_registro', [req.params.id]
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]
     );
     const saldo = saldoCapitalActual(parseFloat(prestamo.monto_capital), pagos);
     const tasa = parseFloat(prestamo.tasa_interes_mensual) / 100;
@@ -92,9 +92,21 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+const ESTADOS_PRESTAMO = ['activo', 'cancelado', 'mora', 'archivado'];
 router.put('/:id', async (req, res, next) => {
   const { estado, pagare_firmado, observaciones, contrato_firmado, requiere_garantia } = req.body;
+  if (estado != null && !ESTADOS_PRESTAMO.includes(estado)) {
+    return res.status(400).json({ error: `Estado inválido. Debe ser: ${ESTADOS_PRESTAMO.join(', ')}` });
+  }
   try {
+    // No permitir marcar 'cancelado' manualmente si todavía queda saldo por cobrar.
+    if (estado === 'cancelado') {
+      const { rows: pr } = await pool.query('SELECT monto_capital FROM prestamos WHERE id = $1', [req.params.id]);
+      const { rows: pagos } = await pool.query('SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]);
+      if (pr.length && saldoCapitalActual(parseFloat(pr[0].monto_capital), pagos) > 1) {
+        return res.status(400).json({ error: 'No se puede marcar como finalizado un préstamo con saldo pendiente. Registrá el pago final.' });
+      }
+    }
     const { rows } = await pool.query(
       `UPDATE prestamos SET
          estado            = COALESCE($1, estado),
@@ -174,7 +186,7 @@ router.get('/:id/contrato-mutuo', async (req, res, next) => {
 
     const prestamo = prestamos[0];
     const { rows: pagos } = await pool.query(
-      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_registro',
+      'SELECT * FROM pagos WHERE id_prestamo = $1 ORDER BY fecha_pago_real, fecha_registro',
       [req.params.id]
     );
 

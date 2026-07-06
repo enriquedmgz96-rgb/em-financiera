@@ -2,9 +2,15 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
 
-// Próximo vencimiento real = primer_vencimiento + cuotas cubiertas por capital.
-// cuotas cubiertas = total - cuotas que faltan (MIN(cuotas_restantes_post_pago)).
-const VTO = `(pr.primer_vencimiento + ((pr.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), pr.total_cuotas)) * CASE pr.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date`;
+// Próximo vencimiento real = primer_vencimiento + períodos cubiertos.
+// Períodos cubiertos = el más avanzado entre capital pagado (total - cuotas que
+// faltan) y períodos servidos (pagos "cuota completa" o "solo interés"). Igual
+// criterio que el dashboard: contempla adelantos, solo-interés y el redondeo.
+const CUB = `LEAST(pr.total_cuotas, GREATEST(
+  pr.total_cuotas - COALESCE(MIN(pg.cuotas_restantes_post_pago), pr.total_cuotas),
+  COUNT(pg.id) FILTER (WHERE pg.tipo_pago IN ('cuota_completa','solo_interes'))
+))`;
+const VTO = `(pr.primer_vencimiento + (${CUB} * CASE pr.periodicidad WHEN 'semanal' THEN INTERVAL '7 days' ELSE INTERVAL '30 days' END))::date`;
 
 router.post('/actualizar-mora', async (req, res, next) => {
   try {

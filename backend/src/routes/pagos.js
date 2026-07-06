@@ -23,6 +23,10 @@ router.post('/', async (req, res, next) => {
   if (!Number.isFinite(montoNum) || montoNum <= 0) {
     return res.status(400).json({ error: 'monto_pagado debe ser un número mayor a 0' });
   }
+  // El recargo por mora no puede superar el propio monto de la cuota (sanity).
+  if (moraNum > montoNum) {
+    return res.status(400).json({ error: 'El interés por mora no puede ser mayor que el monto del pago.' });
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -37,6 +41,10 @@ router.post('/', async (req, res, next) => {
     if (prestamo.estado === 'cancelado') {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'El préstamo ya está cancelado' });
+    }
+    if (prestamo.estado === 'archivado') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'El préstamo está archivado. Desarchivalo antes de registrar un pago.' });
     }
 
     // Insertar el nuevo pago con valores provisorios (se recalculan abajo)
@@ -80,6 +88,14 @@ router.post('/', async (req, res, next) => {
         const cuotaCompleta = parseFloat((resultado.capitalAmortizado + interesPeriodo).toFixed(2));
         const monto = parseFloat(pg.monto_pagado);
         const tol = 1; // tolerancia $1 por redondeos
+        // Tope superior: nunca se puede cobrar más que la deuda total (saldo + interés).
+        const maxPagable = parseFloat((saldo + interesPeriodo).toFixed(2));
+        if (monto > maxPagable + tol) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `El monto ($${monto.toFixed(2)}) supera la deuda total del préstamo ($${maxPagable.toFixed(2)} = saldo + interés). No se puede cobrar más de lo que se debe.`,
+          });
+        }
         if (pg.tipo_pago === 'adelanto_parcial' && monto < interesPeriodo - tol) {
           await client.query('ROLLBACK');
           return res.status(400).json({

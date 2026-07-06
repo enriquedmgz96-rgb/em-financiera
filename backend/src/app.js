@@ -43,7 +43,7 @@ app.use('/api/pagos',         pagosRouter);
 app.use('/api/dashboard',     dashboardRouter);
 app.use('/api/calcular',      calculadoraRouter);
 app.use('/api/tasas',         tasasRouter);
-app.use('/api/mantenimiento', mantenimientoRouter);
+app.use('/api/mantenimiento', adminOnly, mantenimientoRouter); // cambios masivos de estado: solo admin
 app.use('/api/categorias',    categoriasRouter);
 app.use('/api/usuarios',      adminOnly, usuariosRouter); // gating por admin
 // Módulo plata de terceros

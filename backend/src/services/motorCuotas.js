@@ -78,8 +78,11 @@ function calcularPago({ tipoPago, montoPagado, saldoCapitalActual, tasaMensual, 
     const ratio = r * saldoCapitalPostPago / cuotaBase;
     cuotasRestantesPostPago = ratio >= 1 ? 999 : Math.round(-Math.log(1 - ratio) / Math.log(1 + r));
   } else {
-    // flat y aleman: cuotas restantes = saldo / capital mensual
-    cuotasRestantesPostPago = Math.ceil(saldoCapitalPostPago / cuotaBase);
+    // flat y aleman: cuotas restantes = saldo / capital mensual.
+    // Restamos un epsilon para absorber el residuo de punto flotante que deja
+    // valor_cuota_base redondeado a 2 decimales; si no, Math.ceil infla en +1
+    // (ej. 666666.67 / 133333.33 = 5.0000002 → 6 en vez de 5) y produce mora falsa.
+    cuotasRestantesPostPago = Math.ceil(saldoCapitalPostPago / cuotaBase - 1e-6);
   }
 
   return {

@@ -223,18 +223,19 @@
 
     function ocultarLogin(user) {
       document.getElementById('loginOverlay').classList.remove('visible');
-      const inicial = (user.nombre || user.username || '?')[0].toUpperCase();
+      const nombreUser = esc(user.nombre || user.username || '');
+      const inicial = esc((user.nombre || user.username || '?')[0].toUpperCase());
       const chipHTML = `
         <div class="user-chip">
           <div class="user-avatar">${inicial}</div>
-          ${user.nombre || user.username}
+          ${nombreUser}
         </div>
         <button class="btn-logout" onclick="logout()">Salir</button>
       `;
       document.getElementById('navbarUser').innerHTML = chipHTML;
       // Drawer user section (mobile)
       document.getElementById('drawerUser').innerHTML = `
-        <span style="font-size:.85rem;color:var(--ink-2);font-weight:600">${user.nombre || user.username}</span>
+        <span style="font-size:.85rem;color:var(--ink-2);font-weight:600">${nombreUser}</span>
         <button class="btn-logout" onclick="logout()" style="font-size:.78rem;padding:.3rem .7rem">Salir</button>
       `;
       navigate('balance');

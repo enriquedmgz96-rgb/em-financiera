@@ -347,7 +347,11 @@ async function archivarCaptacion(id) {
 async function desarchivarCaptacion(id) {
   if (!confirm('¿Restaurar esta captación?')) return;
   try {
-    await api.put(`/captaciones/${id}`, { estado: 'activa' });
+    // Volver al estado real según el saldo: si ya se devolvió todo → 'devuelta'; si no → 'activa'
+    const c = await api.get(`/captaciones/${id}`);
+    const saldo = parseFloat(c.saldo_capital_actual);
+    const estado = (Number.isFinite(saldo) && saldo <= 0) ? 'devuelta' : 'activa';
+    await api.put(`/captaciones/${id}`, { estado });
     renderCaptacionDetalle(id);
   } catch (err) { if (err._auth) return; alert('Error: ' + err.message); }
 }

@@ -56,7 +56,11 @@ async function renderPagoForm(prestamoId) {
   const cuotasRestantesActual = p.pagos.length
     ? Math.min(...p.pagos.map(pg => parseInt(pg.cuotas_restantes_post_pago, 10)))
     : p.total_cuotas;
-  const nroCuotaActual = (p.total_cuotas - cuotasRestantesActual) + 1;
+  // Períodos cubiertos = el más avanzado entre capital pagado y períodos servidos
+  // (cuota completa o solo interés cuentan como período al día). Igual que el dashboard.
+  const periodosServidos = p.pagos.filter(pg => pg.tipo_pago === 'cuota_completa' || pg.tipo_pago === 'solo_interes').length;
+  const periodosCubiertos = Math.min(p.total_cuotas, Math.max(p.total_cuotas - cuotasRestantesActual, periodosServidos));
+  const nroCuotaActual = periodosCubiertos + 1;
   // Fecha en que vence/vencía esta cuota (para ver si paga adelantado)
   const _fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
   const venceEstaCuota = (() => {
@@ -303,6 +307,9 @@ async function renderPagoForm(prestamoId) {
     fd.monto_pagado = montoRawEl.value;
     fd.interes_mora = moraCobrada();
     const msg = document.getElementById('pagoMsg');
+    // Evitar doble submit: deshabilitar el botón durante el envío
+    btnConfirmar.disabled = true;
+    btnConfirmar.style.opacity = '0.5';
     try {
       await api.post('/pagos', fd);
       msg.innerHTML = '<span class="msg-ok">✓ Pago registrado correctamente. Redirigiendo...</span>';
@@ -310,6 +317,8 @@ async function renderPagoForm(prestamoId) {
     } catch (err) {
       if (err._auth) return;
       msg.innerHTML = `<span class="msg-error">${err.message}</span>`;
+      btnConfirmar.disabled = false;
+      btnConfirmar.style.opacity = '';
     }
   });
 }

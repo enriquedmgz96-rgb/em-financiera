@@ -50,7 +50,9 @@ async function renderDevolucionForm(captacionId) {
   const cuotasRestantesActual = c.devoluciones.length
     ? Math.min(...c.devoluciones.map(d => parseInt(d.cuotas_restantes_post_pago, 10)))
     : c.total_cuotas;
-  const nroCuotaActual = (c.total_cuotas - cuotasRestantesActual) + 1;
+  const periodosServidos = c.devoluciones.filter(d => d.tipo_pago === 'cuota_completa' || d.tipo_pago === 'solo_interes').length;
+  const periodosCubiertos = Math.min(c.total_cuotas, Math.max(c.total_cuotas - cuotasRestantesActual, periodosServidos));
+  const nroCuotaActual = periodosCubiertos + 1;
   const _fechaSolo = s => { const [y,m,d] = String(s).split('T')[0].split('-').map(Number); return new Date(y, m-1, d); };
   const venceEstaCuota = (() => {
     const dt = _fechaSolo(c.primer_vencimiento);
@@ -214,6 +216,8 @@ async function renderDevolucionForm(captacionId) {
     fd.id_captacion = captacionId;
     fd.monto_pagado = montoRawEl.value;
     const msg = document.getElementById('pagoMsg');
+    btnConfirmar.disabled = true;
+    btnConfirmar.style.opacity = '0.5';
     try {
       await api.post('/devoluciones', fd);
       msg.innerHTML = '<span class="msg-ok">✓ Devolución registrada. Redirigiendo...</span>';
@@ -221,6 +225,8 @@ async function renderDevolucionForm(captacionId) {
     } catch (err) {
       if (err._auth) return;
       msg.innerHTML = `<span class="msg-error">${esc(err.message)}</span>`;
+      btnConfirmar.disabled = false;
+      btnConfirmar.style.opacity = '';
     }
   });
 }

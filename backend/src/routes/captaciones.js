@@ -84,7 +84,7 @@ router.get('/:id', async (req, res, next) => {
     if (captaciones.length === 0) return res.status(404).json({ error: 'Captación no encontrada' });
     const captacion = captaciones[0];
     const { rows: devoluciones } = await pool.query(
-      'SELECT * FROM devoluciones WHERE id_captacion = $1 ORDER BY fecha_registro',
+      'SELECT * FROM devoluciones WHERE id_captacion = $1 ORDER BY fecha_pago_real, fecha_registro',
       [req.params.id]
     );
     const saldo = saldoCapitalActual(parseFloat(captacion.monto_capital), devoluciones);
@@ -97,9 +97,21 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+const ESTADOS_CAPTACION = ['activa', 'devuelta', 'mora', 'archivada'];
 router.put('/:id', async (req, res, next) => {
   const { estado, observaciones, nro_contrato_mutuo, nro_pagare } = req.body;
+  if (estado != null && !ESTADOS_CAPTACION.includes(estado)) {
+    return res.status(400).json({ error: `Estado inválido. Debe ser: ${ESTADOS_CAPTACION.join(', ')}` });
+  }
   try {
+    // No permitir marcar 'devuelta' si todavía queda saldo por devolver.
+    if (estado === 'devuelta') {
+      const { rows: cap } = await pool.query('SELECT monto_capital FROM captaciones WHERE id = $1', [req.params.id]);
+      const { rows: devs } = await pool.query('SELECT * FROM devoluciones WHERE id_captacion = $1 ORDER BY fecha_pago_real, fecha_registro', [req.params.id]);
+      if (cap.length && saldoCapitalActual(parseFloat(cap[0].monto_capital), devs) > 1) {
+        return res.status(400).json({ error: 'No se puede marcar como devuelta una captación con saldo pendiente. Registrá la devolución final.' });
+      }
+    }
     const { rows } = await pool.query(
       `UPDATE captaciones SET
          estado             = COALESCE($1, estado),

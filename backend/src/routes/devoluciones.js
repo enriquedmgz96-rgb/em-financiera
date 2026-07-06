@@ -81,6 +81,14 @@ router.post('/', async (req, res, next) => {
         const cuotaCompleta = parseFloat((resultado.capitalAmortizado + interesPeriodo).toFixed(2));
         const monto = parseFloat(d.monto_pagado);
         const tol = 1;
+        // Tope superior: no se puede devolver más que la deuda total (saldo + interés).
+        const maxPagable = parseFloat((saldo + interesPeriodo).toFixed(2));
+        if (monto > maxPagable + tol) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `El monto ($${monto.toFixed(2)}) supera lo que se le debe al inversor ($${maxPagable.toFixed(2)} = saldo + interés). No se puede devolver de más.`,
+          });
+        }
         if (d.tipo_pago === 'adelanto_parcial' && monto < interesPeriodo - tol) {
           await client.query('ROLLBACK');
           return res.status(400).json({
