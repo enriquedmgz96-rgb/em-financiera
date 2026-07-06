@@ -9,32 +9,21 @@ router.get('/', async (req, res, next) => {
     // para que la ecuación cierre: cartera = recuperado + pendiente.
     const VIVOS = "estado NOT IN ('cancelado','archivado')";
 
-    const { rows: [totales] } = await pool.query(`
-      SELECT
-        COALESCE(SUM(monto_capital),0) AS capital_total_prestado,
-        COUNT(*)                       AS prestamos_activos
-      FROM prestamos
-      WHERE ${VIVOS}
-    `);
-    // Movimientos sobre pagos de préstamos vivos
-    const { rows: [movimientos] } = await pool.query(`
-      SELECT
-        COALESCE(SUM(pg.capital_amortizado),0) AS capital_cobrado,
-        COALESCE(SUM(pg.interes_pagado),0)     AS intereses_cobrados
-      FROM pagos pg
-      JOIN prestamos p ON p.id = pg.id_prestamo
-      WHERE p.${VIVOS}
-    `);
-    // Pendiente = SUM(monto_capital - amortizado) por préstamo vivo
-    // (incluye los que no tienen pagos — antes quedaban afuera)
-    const { rows: [pendiente] } = await pool.query(`
-      SELECT COALESCE(SUM(p.monto_capital - COALESCE(amort.total,0)), 0) AS capital_pendiente
+    // Finanzas de préstamos POR MONEDA (nunca se suman ARS + USD)
+    const { rows: finPrestRows } = await pool.query(`
+      SELECT p.moneda,
+        COALESCE(SUM(p.monto_capital),0)                          AS capital_total_prestado,
+        COALESCE(SUM(COALESCE(pg.cap,0)),0)                        AS capital_cobrado,
+        COALESCE(SUM(p.monto_capital - COALESCE(pg.cap,0)),0)      AS capital_pendiente,
+        COALESCE(SUM(COALESCE(pg.intr,0)),0)                       AS intereses_cobrados,
+        COUNT(*)                                                   AS prestamos_activos
       FROM prestamos p
       LEFT JOIN (
-        SELECT id_prestamo, SUM(capital_amortizado) AS total
+        SELECT id_prestamo, SUM(capital_amortizado) AS cap, SUM(interes_pagado) AS intr
         FROM pagos GROUP BY id_prestamo
-      ) amort ON amort.id_prestamo = p.id
+      ) pg ON pg.id_prestamo = p.id
       WHERE p.${VIVOS}
+      GROUP BY p.moneda
     `);
     // Períodos cubiertos = el MÁS avanzado entre:
     //   (a) capital pagado: total - cuotas que faltan (MIN(cuotas_restantes_post_pago))
@@ -76,29 +65,21 @@ router.get('/', async (req, res, next) => {
     // Mismo filtro de "vivas" (activas + mora) para que la matemática cierre.
     const VIVAS = "estado NOT IN ('devuelta','archivada')";
 
-    const { rows: [capTot] } = await pool.query(`
-      SELECT
-        COALESCE(SUM(monto_capital),0) AS pasivo_total,
-        COUNT(*)                       AS captaciones_activas
-      FROM captaciones
-      WHERE ${VIVAS}
-    `);
-    const { rows: [devMov] } = await pool.query(`
-      SELECT
-        COALESCE(SUM(d.capital_amortizado),0) AS capital_devuelto,
-        COALESCE(SUM(d.interes_pagado),0)     AS intereses_pagados
-      FROM devoluciones d
-      JOIN captaciones c ON c.id = d.id_captacion
-      WHERE c.${VIVAS}
-    `);
-    const { rows: [pasPend] } = await pool.query(`
-      SELECT COALESCE(SUM(c.monto_capital - COALESCE(dev.total,0)), 0) AS pasivo_pendiente
+    // Finanzas de plata de terceros POR MONEDA
+    const { rows: finTercRows } = await pool.query(`
+      SELECT c.moneda,
+        COALESCE(SUM(c.monto_capital),0)                          AS pasivo_total,
+        COALESCE(SUM(COALESCE(dv.cap,0)),0)                        AS capital_devuelto,
+        COALESCE(SUM(c.monto_capital - COALESCE(dv.cap,0)),0)      AS pasivo_pendiente,
+        COALESCE(SUM(COALESCE(dv.intr,0)),0)                       AS intereses_pagados,
+        COUNT(*)                                                   AS captaciones_activas
       FROM captaciones c
       LEFT JOIN (
-        SELECT id_captacion, SUM(capital_amortizado) AS total
+        SELECT id_captacion, SUM(capital_amortizado) AS cap, SUM(interes_pagado) AS intr
         FROM devoluciones GROUP BY id_captacion
-      ) dev ON dev.id_captacion = c.id
+      ) dv ON dv.id_captacion = c.id
       WHERE c.${VIVAS}
+      GROUP BY c.moneda
     `);
 
     // Próximas devoluciones (7 días) y mora de captaciones. Mismo criterio que
@@ -136,41 +117,55 @@ router.get('/', async (req, res, next) => {
       HAVING ${VTO_C} < CURRENT_DATE
     `);
 
-    // Spread financiero = intereses cobrados − intereses pagados
-    const interesesCobrados = parseFloat(movimientos.intereses_cobrados);
-    const interesesPagados  = parseFloat(devMov.intereses_pagados);
-    const spreadFinanciero  = parseFloat((interesesCobrados - interesesPagados).toFixed(2));
-
-    // Cobertura: capital pendiente de cobrar ÷ pasivo pendiente
-    // (si baja de 1, no me alcanza con lo que tengo para devolver lo que debo)
-    const capPendiente = parseFloat(pendiente.capital_pendiente);
-    const pasPendiente = parseFloat(pasPend.pasivo_pendiente);
-    const cobertura = pasPendiente > 0
-      ? parseFloat((capPendiente / pasPendiente).toFixed(2))
-      : null;
+    // Ensamblar finanzas por moneda (préstamos y terceros), con spread y cobertura
+    // calculados dentro de cada moneda — nunca cruzando ARS con USD.
+    const monedas = [...new Set([
+      ...finPrestRows.map(r => r.moneda),
+      ...finTercRows.map(r => r.moneda),
+    ])].sort();
+    const finanzas_prestamos = [];
+    const finanzas_terceros = [];
+    for (const mon of monedas) {
+      const fp = finPrestRows.find(r => r.moneda === mon);
+      const ft = finTercRows.find(r => r.moneda === mon);
+      const interesesCobrados = parseFloat(fp?.intereses_cobrados || 0);
+      const interesesPagados  = parseFloat(ft?.intereses_pagados || 0);
+      const capPendiente = parseFloat(fp?.capital_pendiente || 0);
+      const pasPendiente = parseFloat(ft?.pasivo_pendiente || 0);
+      if (fp) finanzas_prestamos.push({
+        moneda: mon,
+        capital_total_prestado: parseFloat(fp.capital_total_prestado),
+        capital_cobrado:        parseFloat(fp.capital_cobrado),
+        capital_pendiente:      capPendiente,
+        intereses_cobrados:     interesesCobrados,
+        prestamos_activos:      parseInt(fp.prestamos_activos),
+      });
+      if (ft) finanzas_terceros.push({
+        moneda: mon,
+        pasivo_total:      parseFloat(ft.pasivo_total),
+        capital_devuelto:  parseFloat(ft.capital_devuelto),
+        pasivo_pendiente:  pasPendiente,
+        intereses_pagados: interesesPagados,
+        captaciones_activas: parseInt(ft.captaciones_activas),
+        spread_financiero: parseFloat((interesesCobrados - interesesPagados).toFixed(2)),
+        cobertura: pasPendiente > 0 ? parseFloat((capPendiente / pasPendiente).toFixed(2)) : null,
+      });
+    }
 
     res.json({
-      // Activo (préstamos a clientes)
-      capital_total_prestado: parseFloat(totales.capital_total_prestado),
-      capital_cobrado:        parseFloat(movimientos.capital_cobrado),
-      capital_pendiente:      capPendiente,
-      intereses_cobrados:     interesesCobrados,
-      prestamos_activos:      parseInt(totales.prestamos_activos),
-      prestamos_en_mora:      mora.length,
-      en_mora:                mora,
-      proximos_a_vencer:      proximos,
+      // Activo (préstamos a clientes) — por moneda + datos generales
+      finanzas_prestamos,
+      prestamos_activos: finanzas_prestamos.reduce((s, x) => s + x.prestamos_activos, 0),
+      prestamos_en_mora: mora.length,
+      en_mora:           mora,
+      proximos_a_vencer: proximos,
 
-      // Pasivo (captaciones de inversores)
+      // Pasivo (captaciones de inversores) — por moneda + datos generales
       terceros: {
-        pasivo_total:         parseFloat(capTot.pasivo_total),
-        capital_devuelto:     parseFloat(devMov.capital_devuelto),
-        pasivo_pendiente:     pasPendiente,
-        intereses_pagados:    interesesPagados,
-        captaciones_activas:  parseInt(capTot.captaciones_activas),
-        captaciones_en_mora:  captacionesMora.length,
-        spread_financiero:    spreadFinanciero,
-        cobertura,
-        en_mora:              captacionesMora,
+        finanzas: finanzas_terceros,
+        captaciones_activas: finanzas_terceros.reduce((s, x) => s + x.captaciones_activas, 0),
+        captaciones_en_mora: captacionesMora.length,
+        en_mora:             captacionesMora,
         proximas_devoluciones: proximasDev,
       },
     });
